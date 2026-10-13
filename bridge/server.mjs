@@ -23,6 +23,7 @@ import { chromeAvailable, chromeServer } from './chrome.mjs'
 import { visionServer } from './vision.mjs'
 import { createMemory, memoryPlaces } from './memory.mjs'
 import { capsulaDir, capsulaServer } from './capsula.mjs'
+import { loadLocalEnv } from './env.mjs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
@@ -30,33 +31,7 @@ import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
 
-/**
- * Settings from .env.local, for the bridge as well as the page.
- *
- * Vite already reads that file for the browser's VITE_* settings, and asking
- * a Windows user to also export JARVIS_* variables in a shell — `set` in cmd,
- * `$env:` in PowerShell, neither of which outlives the window — is how
- * settings get lost. So the bridge reads the same file. Only its own keys are
- * taken, and never one the environment already has: the file cannot change
- * which account Claude Code bills, or override a deliberate export.
- */
-function loadLocalEnv() {
-  // .env.local first, so it wins over .env: nothing set is ever overwritten.
-  for (const name of ['.env.local', '.env']) {
-    let text
-    try {
-      text = readFileSync(new URL(`../${name}`, import.meta.url), 'utf8')
-    } catch {
-      continue
-    }
-    for (const line of text.split(/\r?\n/)) {
-      const m = /^\s*(?:export\s+)?((?:JARVIS|CAPSULA|ELEVENLABS)_[A-Z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line)
-      if (!m || process.env[m[1]] !== undefined) continue
-      const quoted = /^(['"])(.*)\1$/.exec(m[2])
-      process.env[m[1]] = quoted ? quoted[2] : m[2].replace(/\s+#.*$/, '')
-    }
-  }
-}
+// Settings from .env.local; see env.mjs for why the bridge reads that file.
 loadLocalEnv()
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
@@ -978,9 +953,12 @@ const handleRequest = async (req, res) => {
     // with a key the app transcribes with Scribe and speaks with ElevenLabs;
     // without one it falls back to the browser's own recogniser and voice, so a
     // student with nothing configured still has a working assistant.
+    //
+    // `pages` is for scripts/autostart.mjs: it counts the open windows, and when
+    // the last one has been closed for a while it switches everything off.
     const eleven = Boolean(elevenKey())
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven }))
+    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven, pages: wss.clients.size }))
   }
 
   // Serve local image files to the page. Screenshots and generated art land on

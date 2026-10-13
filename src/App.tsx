@@ -63,6 +63,16 @@ const newId = () =>
   globalThis.crypto?.randomUUID?.() ??
   `id${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
 
+/** What he says when he has switched himself on, by the clock. */
+function greeting(): string {
+  const h = new Date().getHours()
+  const part = h >= 5 && h < 12 ? 0 : h >= 12 && h < 18 ? 1 : 2
+  return tr(
+    `${['Bom dia', 'Boa tarde', 'Boa noite'][part]}, senhor. Todos os sistemas prontos.`,
+    `${['Good morning', 'Good afternoon', 'Good evening'][part]}, sir. All systems online.`,
+  )
+}
+
 // BARE_NAME and LEADING_NAME — his name used as a vocative, in English or
 // Portuguese, with the recogniser's usual mishearings — come from lang.ts.
 
@@ -315,7 +325,7 @@ export default function App() {
 
   // -- power on -------------------------------------------------------------
 
-  const powerOn = async () => {
+  const powerOn = async (auto = false) => {
     // The ignition button and the space bar can both land here, and the phase
     // only moves after the first await — so without this a double press boots
     // twice, arming two voice loops and two download polls.
@@ -323,7 +333,7 @@ export default function App() {
     booting.current = true
 
     try {
-      await ignite()
+      await ignite(auto)
     } catch (err) {
       // The guard must not outlive a failed boot. Audio unlock can be refused,
       // the microphone prompt dismissed, the bridge unreachable at the wrong
@@ -343,11 +353,12 @@ export default function App() {
     }
   }
 
-  const ignite = async () => {
+  const ignite = async (auto: boolean) => {
     const s = store.getState()
 
     // Must happen inside the click handler — browsers won't start an
-    // AudioContext or speech synthesis without a user gesture.
+    // AudioContext or speech synthesis without a user gesture. The one
+    // exception is the launcher's window (see the auto-start effect below).
     await sfx.unlockAudio()
     sfx.play('boot')
     // The score. Must be started from inside this click handler for the same
@@ -539,6 +550,15 @@ export default function App() {
     })
 
     store.getState().setPhase('dormant')
+
+    // Switched on by the launcher rather than by a hand, so nobody may be
+    // looking at the screen yet. A line of speech is how they learn he is up.
+    if (auto) {
+      const hello = createSpeaker()
+      speaker.current = hello
+      hello.say(greeting())
+      void hello.end()
+    }
   }
 
   // -- clap to start --------------------------------------------------------
@@ -571,6 +591,31 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
+
+  // -- start by himself -----------------------------------------------------
+
+  /**
+   * Opened by scripts/autostart.mjs — at Windows login, or from the desktop
+   * shortcut — he powers himself up with nobody touching anything.
+   *
+   * Two conditions. The address has to ask for it (?ligar), so an ordinary tab
+   * still waits for the button. And the browser has to allow sound without a
+   * click, which the launcher's window does (Chrome started with
+   * --autoplay-policy=no-user-gesture-required). Opened any other way, the
+   * ignition screen stays: booting with a voice the browser refuses to play
+   * would look like a broken assistant rather than a quiet one.
+   */
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('ligar')) return
+    let gone = false
+    void sfx.soundAllowed().then((ok) => {
+      if (ok && !gone) void powerOn(true)
+    })
+    return () => {
+      gone = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // -- level pump + keys ----------------------------------------------------
 

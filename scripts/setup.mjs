@@ -142,11 +142,23 @@ if (elSource) {
   line(info, say('Sem chave da ElevenLabs — o JARVIS usa a voz do navegador (funciona bem).', 'No ElevenLabs key found — JARVIS will use browser speech (that is completely fine).'));
 }
 
+// --- Start with Windows ---------------------------------------------------
+if (WINDOWS) {
+  const link = join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Jarvis.lnk');
+  line(
+    existsSync(link) ? tick : info,
+    existsSync(link)
+      ? say('Liga junto com o Windows (atalho na pasta de inicialização).', 'Starts with Windows (shortcut in the Startup folder).')
+      : say('Não liga junto com o Windows. Para ligar: npm run inicio-automatico', 'Does not start with Windows. To make it: npm run inicio-automatico'),
+  );
+}
+
 // --- How to run ----------------------------------------------------------
 console.log('');
 console.log(say('Para rodar o JARVIS:', 'To run JARVIS:'));
 console.log(say('  npm start                 # ponte e interface juntas', '  npm start                 # the brain and the face together'));
 console.log(say('  npm start -- --writes     # permitindo ações (arquivos, celular, cliques no navegador)', '  npm start -- --writes     # allowing actions (files, phone, browser clicks)'));
+console.log(say('  npm run janela            # tudo junto, numa janela própria que liga sozinha', '  npm run janela            # everything, in a window of its own that powers itself on'));
 console.log('');
 console.log(say('Depois abra http://localhost:5173 no Chrome, clique em INICIALIZAR e diga "Ei Jarvis".', 'Then open http://localhost:5173 in Chrome, click INITIALISE and say "Hey Jarvis".'));
 console.log('');

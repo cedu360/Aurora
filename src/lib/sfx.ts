@@ -77,6 +77,27 @@ export async function unlockAudio(): Promise<void> {
   void loadOverrides()
 }
 
+/**
+ * Whether this page may make a sound without a click.
+ *
+ * Normally it may not, until someone interacts with it. The exception is the
+ * window scripts/autostart.mjs opens: Chrome started with
+ * --autoplay-policy=no-user-gesture-required, which is what lets JARVIS power
+ * himself up at login. Asking the AudioContext is the one test that works in
+ * every Chromium: it runs if sound is allowed and stays suspended if not.
+ * resume() can hang rather than reject, hence the race.
+ */
+export async function soundAllowed(): Promise<boolean> {
+  const running = () => audio().state === 'running'
+  if (running()) return true
+  try {
+    await Promise.race([audio().resume(), new Promise((r) => setTimeout(r, 500))])
+  } catch {
+    /* refused — answered below */
+  }
+  return running()
+}
+
 /** Pick up any real audio files the user has dropped into public/audio/. */
 async function loadOverrides() {
   const cues: Cue[] = ['boot', 'wake', 'listen', 'tool', 'done', 'error']

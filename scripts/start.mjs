@@ -49,13 +49,16 @@ function vendorWasm() {
 
 const writes = process.argv.includes('--writes')
 
-// A dim label per process, so the interleaved logs stay readable.
+// A dim label per process, so the interleaved logs stay readable. Plain when
+// the output is a file — the launcher's log — where colour codes are noise.
+const COLOUR = Boolean(process.stdout.isTTY)
+const tagged = (tag, colour) => (COLOUR ? `\x1b[${colour}m${tag}\x1b[0m` : tag)
 const paint = (tag, colour) => (line) =>
   line
     .toString()
     .split('\n')
     .filter((l) => l.length)
-    .map((l) => `\x1b[${colour}m${tag}\x1b[0m ${l}`)
+    .map((l) => `${tagged(tag, colour)} ${l}`)
     .join('\n')
 
 const children = []
@@ -71,7 +74,7 @@ function run(name, command, args, colour, env) {
   child.on('exit', (code) => {
     // If either half dies the other is useless, so take the whole thing down
     // rather than leave a half-running app that looks alive but cannot answer.
-    console.log(`\x1b[${colour}m${name}\x1b[0m ${say(`saiu (${code}); parando o resto.`, `exited (${code}); stopping the rest.`)}`)
+    console.log(`${tagged(name, colour)} ${say(`saiu (${code}); parando o resto.`, `exited (${code}); stopping the rest.`)}`)
     shutdown(code ?? 0)
   })
   children.push(child)
