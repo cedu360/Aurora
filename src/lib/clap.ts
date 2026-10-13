@@ -156,7 +156,7 @@ export async function listenForClap(onClap: () => void): Promise<ClapListener> {
       try {
         source.disconnect()
         // The shared microphone stream is NOT stopped here. It belongs to
-        // audio.ts and the voice loop takes it over the moment JARVIS boots;
+        // audio.ts and the voice loop takes it over the moment AURORA boots;
         // stopping it would take the assistant's hearing with it.
         void ctx.close()
       } catch {

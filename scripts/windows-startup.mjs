@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Makes JARVIS start with Windows, or stops him doing so.
+ * Makes AURORA start with Windows, or stops her doing so.
  *
  *   npm run inicio-automatico            start-up and desktop shortcuts
  *   npm run inicio-automatico:desligar   removes the start-up one; the desktop one stays
@@ -27,10 +27,10 @@ import { reactorIco } from './icon.mjs'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 loadLocalEnv()
 
-const PT = (process.env.JARVIS_LANG ?? 'pt-BR').startsWith('pt')
+const PT = (process.env.AURORA_LANG ?? 'pt-BR').startsWith('pt')
 const say = (pt, en) => (PT ? pt : en)
 const action = process.argv[2] ?? 'ligar'
-const NAME = 'Jarvis'
+const NAME = 'Aurora'
 
 if (platform() !== 'win32') {
   console.log(
@@ -103,10 +103,10 @@ if (action === 'desligar') {
   }
   console.log(
     gone.length
-      ? say(`Pronto: ele não liga mais junto com o Windows (removido ${gone[0]}).`, `Done: he no longer starts with Windows (removed ${gone[0]}).`)
-      : say('Ele já não estava ligando junto com o Windows.', 'He was not starting with Windows anyway.'),
+      ? say(`Pronto: ela não liga mais junto com o Windows (removido ${gone[0]}).`, `Done: she no longer starts with Windows (removed ${gone[0]}).`)
+      : say('Ela já não estava ligando junto com o Windows.', 'She was not starting with Windows anyway.'),
   )
-  console.log(say('O atalho da área de trabalho continua lá, para ligar quando quiser.', 'The desktop shortcut is still there, to start him when you want.'))
+  console.log(say('O atalho da área de trabalho continua lá, para ligar quando quiser.', 'The desktop shortcut is still there, to start her when you want.'))
   process.exit(0)
 }
 
@@ -127,7 +127,7 @@ writeFileSync(ICON, reactorIco())
 // guessing, so a user folder with an accent in its name survives.
 const autostart = join(ROOT, 'scripts', 'autostart.mjs')
 const js = [
-  `// Gerado por "npm run inicio-automatico": liga o ${NAME} sem janela de console.`,
+  `// Gerado por "npm run inicio-automatico": liga a ${NAME} sem janela de console.`,
   'var shell = new ActiveXObject("WScript.Shell");',
   `shell.CurrentDirectory = ${JSON.stringify(ROOT)};`,
   `shell.Run(${JSON.stringify(`"${process.execPath}" "${autostart}"`)}, 0, false);`,
@@ -151,23 +151,23 @@ try {
 }
 
 console.log('')
-console.log(say(`Pronto. O ${NAME} vai ligar sozinho sempre que você entrar no Windows.`, `Done. ${NAME} will start by himself every time you sign in to Windows.`))
+console.log(say(`Pronto. A ${NAME} vai ligar sozinha sempre que você entrar no Windows.`, `Done. ${NAME} will start by herself every time you sign in to Windows.`))
 for (const p of made) console.log(`  ${p}`)
 console.log('')
 console.log(
   say(
     [
       'Para ligar agora, dê dois cliques no atalho da área de trabalho.',
-      'Na primeira vez, a janela dele pede o microfone: clique em Permitir.',
+      'Na primeira vez, a janela dela pede o microfone: clique em Permitir.',
       'Fechar a janela desliga tudo depois de uns 45 segundos.',
-      `O que acontece fica registrado em ${join(ROOT, 'logs', 'jarvis.log')}.`,
+      `O que acontece fica registrado em ${join(ROOT, 'logs', 'aurora.log')}.`,
       'Para desfazer: npm run inicio-automatico:desligar',
     ].join('\n'),
     [
-      'To start him now, double-click the desktop shortcut.',
-      'The first time, his window asks for the microphone: click Allow.',
+      'To start her now, double-click the desktop shortcut.',
+      'The first time, her window asks for the microphone: click Allow.',
       'Closing the window switches everything off after about 45 seconds.',
-      `What happens is logged in ${join(ROOT, 'logs', 'jarvis.log')}.`,
+      `What happens is logged in ${join(ROOT, 'logs', 'aurora.log')}.`,
       'To undo: npm run inicio-automatico:desligar',
     ].join('\n'),
   ),

@@ -20,7 +20,7 @@ let master: GainNode | null = null
 const samples = new Map<Cue, AudioBuffer>()
 let ambient: { source: AudioBufferSourceNode; gain: GainNode } | null = null
 
-/** Where the master sits when JARVIS isn't speaking. */
+/** Where the master sits when AURORA isn't speaking. */
 let volume = 0.5
 let ducked = false
 /** How far everything this module makes drops under the voice. */
@@ -82,7 +82,7 @@ export async function unlockAudio(): Promise<void> {
  *
  * Normally it may not, until someone interacts with it. The exception is the
  * window scripts/autostart.mjs opens: Chrome started with
- * --autoplay-policy=no-user-gesture-required, which is what lets JARVIS power
+ * --autoplay-policy=no-user-gesture-required, which is what lets AURORA power
  * himself up at login. Asking the AudioContext is the one test that works in
  * every Chromium: it runs if sound is allowed and stays suspended if not.
  * resume() can hang rather than reject, hence the race.
@@ -301,7 +301,7 @@ export function stopAmbient() {
 }
 
 /**
- * Duck everything this module makes while JARVIS speaks.
+ * Duck everything this module makes while AURORA speaks.
  *
  * This used to touch only the synthesised bed, and return early when there
  * wasn't one — which there never is, because the ambient layer in the shipped

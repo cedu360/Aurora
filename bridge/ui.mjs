@@ -2,7 +2,7 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 
 /**
- * The `ui_*` tools — JARVIS's control of his own face.
+ * The `ui_*` tools — AURORA's control of her own face.
  *
  * `display` gives him a screen to put things on. This gives him the screen
  * itself: the colour the room is lit in, the size and temper of the reactor,
@@ -273,7 +273,7 @@ const chromeSchema = {
   transcript: looseBool('The running conversation log.'),
   tool_badge: looseBool('The active-tool readout under the reactor.'),
   suggestions: looseBool('The "try saying…" hint.'),
-  brand: looseBool('The J.A.R.V.I.S. wordmark and status line.'),
+  brand: looseBool('The A.U.R.O.R.A. wordmark and status line.'),
 }
 
 const CHROME_DESCRIPTION = `Show or hide the furniture around the display.
@@ -336,10 +336,10 @@ const GOLDEN_ANGLE = 137.507764
  */
 export function uiServer(emit) {
   return createSdkMcpServer({
-    name: 'jarvis_ui',
+    name: 'aurora_ui',
     version: '1.0.0',
     instructions:
-      'JARVIS\'s control of his own interface — colour, reactor, orbiting ' +
+      'AURORA\'s control of her own interface — colour, reactor, orbiting ' +
       'images, chrome, effects. Change it when the change carries meaning, ' +
       'and put it back afterwards with ui_reset.',
     // Same reasoning as the display server: behind tool search it would never

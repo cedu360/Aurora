@@ -2,7 +2,7 @@
  * Filler speech.
  *
  * A tool call can take ten seconds, and silence that long reads as a crash. So
- * JARVIS says something the instant work starts — then goes quiet until he has
+ * AURORA says something the instant work starts — then goes quiet until he has
  * an answer. One acknowledgement, no progress chatter.
  *
  * The phrasing follows the character's actual grammar rather than generic

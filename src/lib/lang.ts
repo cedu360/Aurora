@@ -3,14 +3,14 @@ import { LANG } from '../config'
 /**
  * Everything about speech that depends on the language.
  *
- * The original JARVIS only spoke British English, and the assumption leaked
+ * The JARVIS this grew from only spoke British English, and the assumption leaked
  * into several regexes at once: the wake phrase, the words that mean "stop",
  * the words that mean "I haven't finished", the words too common to count as
  * evidence of an echo, and a normaliser that deleted every accented letter.
  * They live here together so a language is one decision rather than five.
  *
  * Accents matter more than they look. A JavaScript regex without the `u` flag
- * treats "á" as a non-word character, so `\b` falls in the middle of "járvis"
+ * treats "ó" as a non-word character, so `\b` falls in the middle of "auróra"
  * and a normaliser written as [^a-z] turns "não" into "n o". Every pattern
  * below is built with `u` and uses \p{L} for its boundaries.
  */
@@ -27,29 +27,29 @@ const B = '(?<![\\p{L}\\p{N}])'
 const E = "(?![\\p{L}\\p{N}'’])"
 
 /**
- * What people put before his name, in either language. Both sets are always
- * accepted: a Brazilian user saying "hey Jarvis" is ordinary, and an English
+ * What people put before her name, in either language. Both sets are always
+ * accepted: a Brazilian user saying "hey Aurora" is ordinary, and an English
  * prefix costs nothing in Portuguese.
  */
 const PREFIX = "(?:hey|hi|ok|okay|yo|ei|oi|olá|ola|e aí|e ai|fala|ô|ó)"
 
 /**
- * His name, plus what recognisers hear instead of it.
+ * Her name, plus what recognisers hear instead of it.
  *
- * The English alternates are the original's: Chrome returns Travis, Jervis,
- * Jarvys or Java's for a perfectly clear "Jarvis". The Portuguese recogniser has
- * its own favourites, and Jarbas — a real Brazilian name — is the commonest.
+ * "Aurora" is an ordinary word in both languages, which is the point of the
+ * name: recognisers spell it right. What they do get wrong is the odd split
+ * ("a rora"), the Indian surname Arora that English models know, and the
+ * French spelling.
  */
-export const NAME =
-  "(?:jarvis|jarvys|jervis|travis|jarviss|java's|jarv|járvis|jarviz|jarbas|jarves|javis|jávis)"
+export const NAME = "(?:aurora|auroras|auróra|aurore|arora|a rora|orora|aurura)"
 
 /** The wake phrase anywhere in a transcript. */
 export const WAKE = new RegExp(`${B}(?:${PREFIX}[\\s,]*)?${NAME}${E}`, 'iu')
 
-/** A bare vocative — "Jarvis", "ei Jarvis" — with nothing asked. */
+/** A bare vocative — "Aurora", "ei Aurora" — with nothing asked. */
 export const BARE_NAME = new RegExp(`^\\s*(?:${PREFIX}[\\s,]*)?${NAME}[\\s,.!?]*$`, 'iu')
 
-/** A leading vocative on a real command: "Jarvis, que horas são". */
+/** A leading vocative on a real command: "Aurora, que horas são". */
 export const LEADING_NAME = new RegExp(`^\\s*(?:${PREFIX}[\\s,]*)?${NAME}${E}[\\s,.:!?-]*`, 'iu')
 
 /**
@@ -75,9 +75,9 @@ export const CONTINUES = new RegExp(`^(?:${isPt ? CONTINUES_PT : CONTINUES_EN})[
  * would make every answer containing "para" interrupt itself.
  */
 const OVERRIDE_EN =
-  `${B}(?:stop|wait|jarvis|cancel|enough|quiet|hold on|shut up|never ?mind|forget it|no)${E}`
+  `${B}(?:stop|wait|aurora|cancel|enough|quiet|hold on|shut up|never ?mind|forget it|no)${E}`
 const OVERRIDE_PT =
-  `${B}(?:pare|parar|para tudo|espera|espere|pera|peraí|perai|cancela|cancelar|chega|silêncio|silencio|quieto|cala a boca|deixa pra lá|deixa para lá|esquece|stop|jarvis|jarbas)${E}` +
+  `${B}(?:pare|parar|para tudo|espera|espere|pera|peraí|perai|cancela|cancelar|chega|silêncio|silencio|quieto|quieta|cala a boca|deixa pra lá|deixa para lá|esquece|stop|aurora)${E}` +
   '|^\\s*(?:(?:para|não|nao)[\\s,.!]*)+$'
 
 export const OVERRIDE = new RegExp(isPt ? OVERRIDE_PT : OVERRIDE_EN, 'iu')

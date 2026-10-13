@@ -106,14 +106,14 @@ function embedUrl(raw: string): string | null {
  * Every iframe is sandboxed. `allow-same-origin` is deliberately absent from
  * the proxied-page case: that document is served from the bridge's own origin —
  * the one origin permitted to open the agent socket — so granting it
- * same-origin would let a page JARVIS found on the web reach that socket. It
+ * same-origin would let a page AURORA found on the web reach that socket. It
  * does not need it. It is being read, not run.
  */
 /**
  * The live camera, on screen.
  *
  * Holding the camera for as long as the blade is open does two jobs. It shows
- * the user what JARVIS can see, which is the honest way to run a camera; and it
+ * the user what AURORA can see, which is the honest way to run a camera; and it
  * starts the rolling buffer, which is the only reason "what did I just do" can
  * ever be answered — a question that cannot be satisfied by starting to record
  * at the moment it is asked.
@@ -276,7 +276,7 @@ function Card({
     if (!el) return
     const frame = el.querySelector('iframe')
     if (frame?.contentWindow) {
-      frame.contentWindow.postMessage({ jarvis: 'scroll', dy }, '*')
+      frame.contentWindow.postMessage({ aurora: 'scroll', dy }, '*')
     } else {
       el.scrollTop += dy
     }

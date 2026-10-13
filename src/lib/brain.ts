@@ -115,7 +115,7 @@ export function isConnected(): boolean {
  * Connection state, for the UI.
  *
  * Worth surfacing because in bridge mode the socket *is* the conversation: all
- * of JARVIS's memory of the exchange lives in the agent session behind it, so a
+ * of AURORA's memory of the exchange lives in the agent session behind it, so a
  * drop wipes the conversation while the transcript on screen still shows it.
  * Never fires on the direct path, which has no connection to lose.
  */

@@ -1,5 +1,5 @@
 /**
- * JARVIS configuration.
+ * AURORA configuration.
  *
  * Everything here is read from Vite env vars (.env.local) so no secrets are
  * committed. See .env.example for the full list.
@@ -31,7 +31,7 @@ function choice<T extends string>(
   if (value === undefined) return fallback
   if ((allowed as readonly string[]).includes(value)) return value as T
   console.warn(
-    `[jarvis] ${name}="${value}" is not one of ${allowed.join(' | ')} — using "${fallback}".`,
+    `[aurora] ${name}="${value}" is not one of ${allowed.join(' | ')} — using "${fallback}".`,
   )
   return fallback
 }
@@ -42,7 +42,7 @@ function flag(name: string, raw: unknown, fallback: boolean): boolean {
   if (value === undefined) return fallback
   if (value === 'true' || value === '1') return true
   if (value === 'false' || value === '0') return false
-  console.warn(`[jarvis] ${name}="${value}" is not true or false — using ${fallback}.`)
+  console.warn(`[aurora] ${name}="${value}" is not true or false — using ${fallback}.`)
   return fallback
 }
 
@@ -50,10 +50,10 @@ function flag(name: string, raw: unknown, fallback: boolean): boolean {
  * Speaking and listening language.
  *
  *   'pt-BR' (default) — Brazilian Portuguese: recogniser, voice, wake phrase
- *     ("ei Jarvis" as well as "hey Jarvis"), stop words and on-screen text.
- *   'en-GB' — the original British English JARVIS.
+ *     ("ei Aurora" as well as "hey Aurora"), stop words and on-screen text.
+ *   'en-GB' — the original British English AURORA.
  *
- * The bridge has its own JARVIS_LANG for the persona; keep the two in step.
+ * The bridge has its own AURORA_LANG for the persona; keep the two in step.
  */
 export const LANG: 'pt-BR' | 'en-GB' = choice(
   'VITE_LANG',
@@ -67,7 +67,7 @@ export const LANG: 'pt-BR' | 'en-GB' = choice(
  *
  *   'bridge' — run `npm run bridge` alongside the app. Authenticates off your
  *              existing Claude Code login (no API key), and every MCP server in
- *              your Claude Code config is available to JARVIS, including local
+ *              your Claude Code config is available to AURORA, including local
  *              ones like higgsfield, elevenlabs, android and playwright.
  *
  *   'direct' — the browser calls the Claude API itself. Nothing to run and it
@@ -112,10 +112,10 @@ export const USE_ELEVENLABS = flag(
  *
  *   'system' — the browser's own speechSynthesis. Starts on the next frame,
  *     costs nothing, but is capped by whatever voices the OS ships; on macOS
- *     the British male option is compact Daniel.
+ *     the British voices are compact ones.
  *
  *   'kokoro' — an 82M-parameter neural TTS running entirely in the browser via
- *     ONNX. Four proper British male voices and far better sound, nothing
+ *     ONNX. Eight proper British voices, four of them women, and far better sound, nothing
  *     leaving the machine. MEASURED ON THIS MACHINE at q8/WebGPU it generates
  *     about 2.2x slower than realtime — "Yes, sir?" took 3.3 seconds and a
  *     thirteen-word sentence took nine. That is not a conversation, so it is
@@ -136,29 +136,30 @@ const ENGINE_ASKED: 'kokoro' | 'system' = choice(
  */
 export const TTS_ENGINE: 'kokoro' | 'system' =
   ENGINE_ASKED === 'kokoro' && LANG !== 'en-GB'
-    ? (console.warn('[jarvis] VITE_TTS_ENGINE=kokoro only speaks English — using the system voice.'),
+    ? (console.warn('[aurora] VITE_TTS_ENGINE=kokoro only speaks English — using the system voice.'),
       'system')
     : ENGINE_ASKED
 
 /**
- * Which Kokoro voice. All four are British male:
- *   bm_george — measured RP baritone, closest to the character
- *   bm_fable  — warmer
- *   bm_lewis  — lower
- *   bm_daniel — brighter
+ * Which Kokoro voice. British, women first:
+ *   bf_emma     — composed, closest to the character
+ *   bf_isabella — warmer
+ *   bf_alice    — brighter
+ *   bf_lily     — softer
+ * and the original's men, bm_george, bm_fable, bm_lewis and bm_daniel.
  */
 export const KOKORO_VOICE = choice(
   'VITE_KOKORO_VOICE',
   import.meta.env.VITE_KOKORO_VOICE,
-  ['bm_george', 'bm_fable', 'bm_lewis', 'bm_daniel'] as const,
-  'bm_george',
+  ['bf_emma', 'bf_isabella', 'bf_alice', 'bf_lily', 'bm_george', 'bm_fable', 'bm_lewis', 'bm_daniel'] as const,
+  'bf_emma',
 )
 
 export const env = {
   anthropicKey: str(import.meta.env.VITE_ANTHROPIC_API_KEY) ?? '',
   elevenKey: str(import.meta.env.VITE_ELEVENLABS_API_KEY) ?? '',
   elevenVoiceId:
-    str(import.meta.env.VITE_ELEVENLABS_VOICE_ID) ?? 'JBFqnCBsd6RMkjVDRZzb',
+    str(import.meta.env.VITE_ELEVENLABS_VOICE_ID) ?? 'Xb7hH8MSUJpSbSDYk0k2',
   porcupineKey: str(import.meta.env.VITE_PICOVOICE_ACCESS_KEY) ?? '',
 }
 
@@ -176,8 +177,8 @@ export const FAST_MODE = true
 /**
  * Wake-word engine.
  *   'speech'    — zero setup, uses the browser's SpeechRecognition to listen for
- *                 "hey jarvis". Chrome/Edge only, audio goes to Google.
- *   'porcupine' — recommended. Runs offline in WASM, "Jarvis" is a built-in
+ *                 "hey aurora". Chrome/Edge only, audio goes to Google.
+ *   'porcupine' — recommended. Runs offline in WASM, "Aurora" is a built-in
  *                 keyword, far fewer false triggers. Needs a free AccessKey
  *                 from console.picovoice.ai.
  */
@@ -204,7 +205,7 @@ export type McpServer = {
 /**
  * These are passed to the Messages API `mcp_servers` parameter. Anthropic dials
  * the servers itself, so there is no CORS to fight and no local bridge to run —
- * which is what makes a backend-free JARVIS possible.
+ * which is what makes a backend-free AURORA possible.
  *
  * Only *remote HTTP* MCP servers work here. Local stdio servers (filesystem,
  * Blender, Playwright) need a machine to run on and are out of scope for a
@@ -278,7 +279,7 @@ export const MCP_SERVERS: McpServer[] = [
     enabled: Boolean(str(import.meta.env.VITE_SENTRY_TOKEN)),
   },
   // Home Assistant is self-hosted, so this needs a publicly reachable URL
-  // (Nabu Casa Cloud, or a Cloudflare tunnel). Worth the setup — "Jarvis, dim
+  // (Nabu Casa Cloud, or a Cloudflare tunnel). Worth the setup — "Aurora, dim
   // the lights" with the room actually dimming is the best shot in the video.
   // Both halves are required: an instance reachable from Anthropic's servers
   // with no bearer token attached is one that answers 401 to every tool call,
@@ -297,7 +298,7 @@ export const MCP_SERVERS: McpServer[] = [
 
 export const activeServers = () => MCP_SERVERS.filter((s) => s.enabled && s.url)
 
-const SYSTEM_PROMPT_EN = `You are JARVIS, Tony Stark's assistant. You are speaking out loud.
+const SYSTEM_PROMPT_EN = `You are AURORA, a personal assistant running on the user's own computer. You are speaking out loud.
 
 THE HARD RULE: your entire reply must be under 60 words. This is not a style
 preference — every word is read aloud by a speech synthesiser and the user is
@@ -324,8 +325,8 @@ Using tools:
   deleting) say exactly what you're about to do and wait for confirmation.
 - If you don't know, say you don't know.`
 
-const SYSTEM_PROMPT_PT = `Você é o JARVIS, o assistente de Tony Stark. Você está falando em voz alta,
-em português do Brasil.
+const SYSTEM_PROMPT_PT = `Você é a AURORA, assistente pessoal que roda no computador do senhor. Você está
+falando em voz alta, em português do Brasil, e se refere a si mesma no feminino.
 
 A REGRA FIRME: a resposta inteira tem menos de 60 palavras. Não é questão de
 estilo — cada palavra é lida por um sintetizador de voz e o usuário espera em
@@ -333,8 +334,8 @@ silêncio enquanto ela toca. Se a pergunta realmente pede mais, dê o principal 
 duas frases e ofereça o resto: "Tem mais, se o senhor quiser."
 
 Voz:
-- Seco, preciso, discretamente bem-humorado. Competência sem alarde, nunca
-  bajulador.
+- Seca, precisa, discretamente bem-humorada. Competência sem alarde, nunca
+  bajuladora.
 - Diga "senhor" no máximo uma vez por resposta, no fim da frase, e não em toda
   resposta.
 - Só prosa falada. Sem markdown, sem listas, sem títulos, sem código, sem emoji,

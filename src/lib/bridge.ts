@@ -12,7 +12,7 @@ import { t } from './lang'
  *
  * The socket is the session. The bridge holds one Claude Agent SDK query per
  * connection and the whole conversation lives inside it, so a dropped socket
- * silently wipes JARVIS's memory of the exchange while the transcript on screen
+ * silently wipes AURORA's memory of the exchange while the transcript on screen
  * still shows it. That is why the reconnect below is loud rather than
  * invisible: `watchConnection` exists so the HUD can say so.
  */
@@ -100,7 +100,7 @@ export function watchBlades(fn: (blade: Blade) => void) {
 }
 
 /** Commands that redress the interface — theme, reactor, orbits, effects. Same
- *  out-of-band route as panels: JARVIS issues them while he is still mid-answer
+ *  out-of-band route as panels: AURORA issues them while he is still mid-answer
  *  so the change is on screen as he says it, which means they cannot ride back
  *  on the turn's result. The op/args pair stays untyped here on purpose — this
  *  module is a transport, and the store is where the shape is decided. */
@@ -114,7 +114,7 @@ export function watchUi(fn: (op: string, args: any) => void) {
  *
  *   'open'        — first connection of the page.
  *   'lost'        — the socket died. The agent session died with it, so
- *                   everything said so far is gone as far as JARVIS knows.
+ *                   everything said so far is gone as far as AURORA knows.
  *   'reconnected' — we're back, on a fresh session with no memory of the above.
  */
 export type ConnectionState = 'open' | 'lost' | 'reconnected'
@@ -301,7 +301,7 @@ function connect(): Promise<WebSocket> {
   return connecting
 }
 
-/** Open the socket early so the first "Hey Jarvis" isn't waiting on a handshake. */
+/** Open the socket early so the first "Hey Aurora" isn't waiting on a handshake. */
 export async function warmBridge(): Promise<void> {
   await connect()
   // Don't block startup if the bridge never announces — the dispatcher fills
@@ -337,7 +337,7 @@ export async function ask(
    * Two concurrent turns genuinely would corrupt each other — both listeners
    * see every delta, and the first 'done' resolves both with the other's text —
    * but refusing the new one was the wrong way to prevent that. It surfaced as
-   * "JARVIS is already answering", which is a sentence about this module's
+   * "AURORA is already answering", which is a sentence about this module's
    * bookkeeping rather than about anything the user did, and it contradicts the
    * premise the whole app is built on: say something and it becomes the turn.
    *
@@ -490,7 +490,7 @@ export async function ask(
 }
 
 /**
- * Cut JARVIS off mid-answer.
+ * Cut AURORA off mid-answer.
  *
  * Tells the bridge to stop, then settles the in-flight turn here rather than
  * waiting for a 'done' that a barge-in may never produce. Whatever he had

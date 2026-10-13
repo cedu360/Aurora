@@ -285,7 +285,7 @@ body::after {
 }
 
 .log-user .log-text { opacity: 0.52; }
-.log-jarvis .log-text {
+.log-aurora .log-text {
   color: #eaf9ff;
   text-shadow: 0 0 26px color-mix(in srgb, var(--accent) 45%, transparent);
 }
@@ -456,7 +456,7 @@ kbd {
   opacity: 0.62;
 }
 
-/* The design system JARVIS composes with. These class names live in three
+/* The design system AURORA composes with. These class names live in three
    places and all three have to agree: here, in ALLOWED_CLASSES in
    src/ui/Panels.tsx — anything absent from that set is stripped before it
    reaches the DOM — and in the `display` tool description in
@@ -589,7 +589,7 @@ kbd {
 
 /* Web media -----------------------------------------------------------------
 
-   Everything below shows something JARVIS found rather than something he made:
+   Everything below shows something AURORA found rather than something he made:
    image-search thumbnails, a clip, a YouTube result. It is loaded through the
    bridge proxy (see rewriteMedia in src/ui/Panels.tsx), so as far as the page
    is concerned it all comes from localhost.
@@ -1152,7 +1152,7 @@ kbd {
 /* ---------------------------------------------------------------------------
    Decoding text
 
-   JARVIS's half of the transcript resolves out of noise instead of simply
+   AURORA's half of the transcript resolves out of noise instead of simply
    appearing. Two spans do the work: the ghost is the live scramble, the veil
    is the text that has not been reached yet — present in the DOM, and so in
    the accessibility tree and in the line wrapping, but not painted. Reserving

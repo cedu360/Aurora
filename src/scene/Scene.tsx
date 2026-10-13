@@ -14,7 +14,7 @@ import { Particles } from './Particles'
 import { Orbits } from './Orbits'
 import { useStore, phaseColor, accentFor, type Phase } from '../store'
 
-/** Rings spin harder while JARVIS is working — reads as effort. */
+/** Rings spin harder while AURORA is working — reads as effort. */
 const spinFor: Record<Phase, number> = {
   offline: 0.08, // barely turning — the machine is off
   boot: 3.2,
@@ -89,7 +89,7 @@ export type Drive = {
 /**
  * A colour target that only re-parses when the string actually changes.
  *
- * The colours in the ui slice are arbitrary CSS written by JARVIS, and
+ * The colours in the ui slice are arbitrary CSS written by AURORA, and
  * THREE.Color.set logs a warning for anything it cannot parse. Setting one
  * unconditionally per frame turns a single typo into sixty console lines a
  * second, which drowns everything else out during a demo.

@@ -45,7 +45,7 @@ export function micLevel(): number {
   return Math.min(1, avg * 3.2)
 }
 
-/** Analyser fed from an <audio> element, so the orb reacts while JARVIS talks. */
+/** Analyser fed from an <audio> element, so the orb reacts while AURORA talks. */
 export function attachOutputAnalyser(el: HTMLAudioElement): () => number {
   const c = new AudioContext()
   const src = c.createMediaElementSource(el)

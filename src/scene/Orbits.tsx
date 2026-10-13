@@ -7,12 +7,12 @@ import { BRIDGE_HTTP_URL } from '../config'
 /**
  * Images revolving around the reactor.
  *
- * This is JARVIS's shelf: a screenshot he has just taken, a still he generated,
+ * This is AURORA's shelf: a screenshot he has just taken, a still he generated,
  * the cover of whatever is playing. Each one is a camera-facing plane carried
  * round a tilted circle, which is enough to read as an orbit without any of the
  * cost of real 3D — no lighting, no shadows, no depth sorting to fight.
  *
- * Not one element in here is React. The list changes whenever JARVIS adds or
+ * Not one element in here is React. The list changes whenever AURORA adds or
  * drops an object, and expressing that as JSX would put mounts and unmounts of
  * scene objects on the React render path — the exact thing the Drive object in
  * Scene.tsx exists to avoid, and worse here, because a re-render of this subtree
@@ -128,7 +128,7 @@ export function Orbits() {
         // One line, once. A bad path is a fact about the request, not a reason
         // to take the scene down, so the entry simply never becomes visible.
         entry.dead = true
-        console.warn('[jarvis] orbit image failed to load', entry.def.id, src)
+        console.warn('[aurora] orbit image failed to load', entry.def.id, src)
       },
     )
   }

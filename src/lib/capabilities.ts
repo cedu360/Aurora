@@ -40,7 +40,7 @@ export function capabilitiesProbed(): boolean {
 
 /**
  * Ask the bridge what it can do, once. Called during the boot sequence, before
- * the voice loop starts, so the first "Hey Jarvis" already uses the right
+ * the voice loop starts, so the first "Hey Aurora" already uses the right
  * engine. Never throws: a failed probe simply leaves the browser fallback in
  * place, which is the correct behaviour when the bridge is unreachable.
  */

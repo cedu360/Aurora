@@ -2,17 +2,17 @@
  * Neural speech, entirely in the browser.
  *
  * `speechSynthesis` is limited to whatever voices the operating system ships,
- * and on macOS the British male option is Daniel — a compact concatenative
- * voice from over a decade ago. It is the honest ceiling of the built-in API
+ * and on macOS the British options are compact concatenative voices from over
+ * a decade ago. It is the honest ceiling of the built-in API
  * and it sounds like a satnav.
  *
  * Kokoro is an 82M-parameter TTS model that runs on WebGPU via ONNX. No cloud,
  * no API key, nothing leaves the machine — but it sounds like a person. It
- * carries four British male voices, which is what this project actually wants.
+ * carries eight British voices, four of them women, which is what AURORA wants.
  *
  * The cost is a one-time ~86MB model download, cached by the browser
- * afterwards. It's fetched during the boot sequence so the first "Hey Jarvis"
- * isn't waiting on it, and anything that goes wrong falls back to Daniel.
+ * afterwards. It's fetched during the boot sequence so the first "Hey Aurora"
+ * isn't waiting on it, and anything that goes wrong falls back to the system voice.
  */
 
 import { KOKORO_VOICE } from '../config'
@@ -38,11 +38,20 @@ export const isUnavailable = () => failed
 export let lastError = ''
 
 /**
- * British male voices, in the order they suit the character. George is the
- * closest to a measured RP baritone; Fable is warmer, Lewis lower, Daniel
- * brighter.
+ * British voices, in the order they suit the character: the four women first —
+ * Emma the most composed, Isabella warmer, Alice brighter, Lily softer — then
+ * the four men the original shipped with, for anyone who wants one.
  */
-export const VOICES = ['bm_george', 'bm_fable', 'bm_lewis', 'bm_daniel'] as const
+export const VOICES = [
+  'bf_emma',
+  'bf_isabella',
+  'bf_alice',
+  'bf_lily',
+  'bm_george',
+  'bm_fable',
+  'bm_lewis',
+  'bm_daniel',
+] as const
 
 /**
  * A voice id the model doesn't carry throws inside generate(), once per
@@ -53,7 +62,7 @@ export const VOICES = ['bm_george', 'bm_fable', 'bm_lewis', 'bm_daniel'] as cons
 function resolveVoice(): string {
   if ((VOICES as readonly string[]).includes(KOKORO_VOICE)) return KOKORO_VOICE
   console.warn(
-    `[jarvis] VITE_KOKORO_VOICE="${KOKORO_VOICE}" is not one of ${VOICES.join(', ')} — using ${VOICES[0]}.`,
+    `[aurora] VITE_KOKORO_VOICE="${KOKORO_VOICE}" is not one of ${VOICES.join(', ')} — using ${VOICES[0]}.`,
   )
   return VOICES[0]
 }
@@ -97,7 +106,7 @@ export async function load(): Promise<Kokoro | null> {
       model = tts as unknown as Kokoro
       return model
     } catch (err) {
-      console.warn('[jarvis] kokoro unavailable, using the system voice:', err)
+      console.warn('[aurora] kokoro unavailable, using the system voice:', err)
       lastError = String((err as Error)?.message ?? err)
       failed = true
       return null
@@ -125,7 +134,7 @@ export async function speak(text: string): Promise<string | null> {
   } catch (err) {
     // Surfaced rather than swallowed: a silent null here just looks like the
     // voice quietly reverting to the system one with no explanation.
-    console.error('[jarvis] kokoro generation failed:', err)
+    console.error('[aurora] kokoro generation failed:', err)
     lastError = String((err as Error)?.message ?? err)
     failures++
     if (failures >= MAX_FAILURES) {
@@ -133,7 +142,7 @@ export async function speak(text: string): Promise<string | null> {
       // keeps routing every sentence here and every sentence keeps throwing.
       failed = true
       console.warn(
-        `[jarvis] kokoro failed ${failures} times running — the system voice from here on.`,
+        `[aurora] kokoro failed ${failures} times running — the system voice from here on.`,
       )
     }
     return null

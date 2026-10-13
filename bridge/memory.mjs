@@ -17,7 +17,7 @@ import { homedir, platform } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
 /**
- * JARVIS's memory, on disk.
+ * AURORA's memory, on disk.
  *
  * The original forgot everything whenever the socket dropped. The conversation
  * lived only inside the SDK session, a reconnect is a new session, and so the
@@ -32,14 +32,14 @@ import { dirname, join, resolve } from 'node:path'
  * reload, and three tools reach the rest: lembrar, recordar, esquecer.
  *
  * Every write is mirrored to a second directory, ideally on another disk. On
- * Windows the defaults are D:\JarvisMemoria with a copy on E:\JarvisMemoria,
+ * Windows the defaults are D:\AuroraMemoria with a copy on E:\AuroraMemoria,
  * because that is the machine this fork was written for; losing either disk
  * loses nothing. At start-up the two are reconciled file by file, newest wins,
  * so a disk that was unplugged for a week catches up rather than being trusted.
  *
  * What is stored is everything said to him and everything he answered, in
  * plain text. That is the point of the feature, and also the reason it can be
- * switched off with JARVIS_MEMORY=off.
+ * switched off with AURORA_MEMORY=off.
  */
 
 const NOTES = 'memoria.md'
@@ -48,18 +48,18 @@ const LOGS = 'conversas'
 /**
  * Where memory lives, or null when it is switched off.
  *
- * JARVIS_MEMORY_BACKUP set to an empty string turns the mirror off; left unset
+ * AURORA_MEMORY_BACKUP set to an empty string turns the mirror off; left unset
  * it defaults to E: on Windows when that drive exists, and to nothing
  * elsewhere, since a copy on the same disk protects against very little.
  */
 export function memoryPlaces(env = process.env) {
-  if (/^(0|off|false|no|nao|não)$/i.test(env.JARVIS_MEMORY ?? '')) return null
+  if (/^(0|off|false|no|nao|não)$/i.test(env.AURORA_MEMORY ?? '')) return null
   const windows = platform() === 'win32'
   const drive = (letter) => windows && existsSync(`${letter}:\\`)
   const dir =
-    env.JARVIS_MEMORY_DIR ||
-    (drive('D') ? 'D:\\JarvisMemoria' : join(homedir(), 'JarvisMemoria'))
-  const wanted = env.JARVIS_MEMORY_BACKUP ?? (drive('E') ? 'E:\\JarvisMemoria' : '')
+    env.AURORA_MEMORY_DIR ||
+    (drive('D') ? 'D:\\AuroraMemoria' : join(homedir(), 'AuroraMemoria'))
+  const wanted = env.AURORA_MEMORY_BACKUP ?? (drive('E') ? 'E:\\AuroraMemoria' : '')
   const backup = wanted && resolve(wanted) !== resolve(dir) ? resolve(wanted) : null
   return { dir: resolve(dir), backup }
 }
@@ -110,18 +110,18 @@ const NOTE_LINE =
 const LABELS = {
   pt: {
     header:
-      '# Memória do JARVIS\n\n' +
+      '# Memória da AURORA\n\n' +
       'Anotações que o senhor pediu para guardar, uma por linha começando com "- ".\n' +
-      'Pode editar à mão. O número entre colchetes é como o JARVIS apaga uma anotação.\n',
+      'Pode editar à mão. O número entre colchetes é como a AURORA apaga uma anotação.\n',
     day: 'Conversas de',
     you: 'Você',
     silent: '(sem resposta)',
   },
   en: {
     header:
-      '# JARVIS memory\n\n' +
-      'Notes you asked him to keep, one per line starting with "- ".\n' +
-      'Edit freely. The bracketed number is how JARVIS deletes a note.\n',
+      '# AURORA memory\n\n' +
+      'Notes you asked her to keep, one per line starting with "- ".\n' +
+      'Edit freely. The bracketed number is how AURORA deletes a note.\n',
     day: 'Conversations on',
     you: 'You',
     silent: '(no answer)',
@@ -192,10 +192,10 @@ export function createMemory({
       await copyAcross(dir, backup, rel)
       if (mirrorFailing) {
         mirrorFailing = false
-        warn(`[jarvis] memória: cópia em ${backup} voltou a funcionar`)
+        warn(`[aurora] memória: cópia em ${backup} voltou a funcionar`)
       }
     } catch (err) {
-      if (!mirrorFailing) warn(`[jarvis] memória: não consegui copiar para ${backup}: ${err.message}`)
+      if (!mirrorFailing) warn(`[aurora] memória: não consegui copiar para ${backup}: ${err.message}`)
       mirrorFailing = true
     }
   }
@@ -244,7 +244,7 @@ export function createMemory({
     try {
       await mkdir(join(backup, LOGS), { recursive: true })
     } catch (err) {
-      warn(`[jarvis] memória: a cópia em ${backup} não está disponível: ${err.message}`)
+      warn(`[aurora] memória: a cópia em ${backup} não está disponível: ${err.message}`)
       mirrorFailing = true
       report.backupOk = false
       return report
@@ -265,7 +265,7 @@ export function createMemory({
           report.mirrored++
         }
       } catch (err) {
-        warn(`[jarvis] memória: não consegui sincronizar ${rel}: ${err.message}`)
+        warn(`[aurora] memória: não consegui sincronizar ${rel}: ${err.message}`)
       }
     }
     return report
@@ -352,7 +352,7 @@ export function createMemory({
         (fresh ? `# ${L.day} ${day}\n` : '') +
           `\n## ${time}\n` +
           `**${L.you}:** ${oneLine(said, 4000)}\n` +
-          `**JARVIS:** ${oneLine(answer, 8000) || L.silent}\n`,
+          `**AURORA:** ${oneLine(answer, 8000) || L.silent}\n`,
         'utf8',
       )
       await mirror(rel)
@@ -371,7 +371,7 @@ export function createMemory({
       }
       const m = /^\*\*(.+?):\*\*\s?(.*)$/.exec(line)
       if (m && cur) {
-        if (m[1] === 'JARVIS') cur.answer = m[2]
+        if (m[1] === 'AURORA') cur.answer = m[2]
         else cur.said = m[2]
       }
     }
@@ -488,7 +488,7 @@ export function createMemory({
 
     let lines = turns.flatMap((e) => [
       `${e.day} ${e.time.slice(0, 5)} ${L.you}: ${inert(clip(e.said, 300))}`,
-      `${e.day} ${e.time.slice(0, 5)} JARVIS: ${inert(clip(e.answer, 300))}`,
+      `${e.day} ${e.time.slice(0, 5)} AURORA: ${inert(clip(e.answer, 300))}`,
     ])
     while (lines.length && noteText.length + lines.join('\n').length > budget * 1.5) lines = lines.slice(2)
 
@@ -515,7 +515,7 @@ export function createMemory({
 
   function server() {
     return createSdkMcpServer({
-      name: 'jarvis_memoria',
+      name: 'aurora_memoria',
       version: '1.0.0',
       instructions:
         "The user's long-term memory, kept on their own disks. The notes and the " +
@@ -591,7 +591,7 @@ export function createMemory({
                 parts.push(
                   `${pt ? 'Conversas' : 'Conversations'}:\n` +
                     exchanges
-                      .map((e) => `- ${e.day} ${e.time.slice(0, 5)} ${L.you}: ${clip(e.said, 400)} | JARVIS: ${clip(e.answer, 400)}`)
+                      .map((e) => `- ${e.day} ${e.time.slice(0, 5)} ${L.you}: ${clip(e.said, 400)} | AURORA: ${clip(e.answer, 400)}`)
                       .join('\n'),
                 )
               }

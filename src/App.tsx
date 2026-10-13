@@ -164,7 +164,7 @@ export default function App() {
             // clear the readout while a slow tool was still running.
             store.getState().setActiveTool(null)
             music.working(false)
-            store.getState().pushTurn({ id: turnId, role: 'jarvis', text: '' })
+            store.getState().pushTurn({ id: turnId, role: 'aurora', text: '' })
           }
           store.getState().appendToLastTurn(delta)
           spk.push(delta)
@@ -250,7 +250,7 @@ export default function App() {
     store.getState().setError(null)
     sfx.play('wake')
 
-    // "Jarvis, what's happening in AI this week" in one breath. Waiting for a
+    // "Aurora, what's happening in AI this week" in one breath. Waiting for a
     // greeting he didn't need is the most common way an assistant wastes time.
     if (trailing) {
       void respond(trailing)
@@ -301,7 +301,7 @@ export default function App() {
     if (phase === 'offline' || phase === 'boot' || phase === 'dormant') return
 
     // People keep using his name as a vocative once they're already talking to
-    // him. Strip it rather than sending "jarvis" to the model as a question.
+    // him. Strip it rather than sending "aurora" to the model as a question.
     if (BARE_NAME.test(text)) {
       listen(AWAIT_SPEECH_MS)
       return
@@ -341,7 +341,7 @@ export default function App() {
       // for the rest of the page, recoverable only by reloading. Reset it and
       // put the button back so the user can simply press it again.
       booting.current = false
-      console.error('[jarvis] power-up failed:', err)
+      console.error('[aurora] power-up failed:', err)
       store.getState().setPhase('offline')
       store
         .getState()
@@ -374,7 +374,7 @@ export default function App() {
     watchBlades((blade) => store.getState().pushBlade(blade))
 
     /**
-     * JARVIS asking to see something.
+     * AURORA asking to see something.
      *
      * Announced on screen for as long as it takes, with whatever he said he was
      * looking for. The camera's own light is on too, but a hardware light that
@@ -433,7 +433,7 @@ export default function App() {
       }
     })
 
-    // The interface is JARVIS's to drive. These arrive out of band, pushed
+    // The interface is AURORA's to drive. These arrive out of band, pushed
     // mid-turn the way panels are, so a command can retint the reactor or put
     // something into orbit while he is still speaking the sentence about it.
     watchUi((op, args) => {
@@ -458,7 +458,7 @@ export default function App() {
           s.clearScreen(a.what ?? 'all')
           break
         default:
-          console.warn('[jarvis] unknown ui op:', op, args)
+          console.warn('[aurora] unknown ui op:', op, args)
       }
     })
     // In bridge mode the conversation lives in the agent session, which is tied
@@ -495,8 +495,8 @@ export default function App() {
     }
 
     // Pull the neural voice down during the boot sequence so the first
-    // "Hey Jarvis" isn't waiting on an 86MB download. Deliberately not awaited
-    // — if it's slow, JARVIS comes up on the system voice and swaps over the
+    // "Hey Aurora" isn't waiting on an 86MB download. Deliberately not awaited
+    // — if it's slow, AURORA comes up on the system voice and swaps over the
     // moment the model is ready.
     if (TTS_ENGINE === 'kokoro') {
       void kokoro.load()
@@ -529,7 +529,7 @@ export default function App() {
       await startAnalyser()
     } catch {
       console.warn(
-        '[jarvis] no microphone stream — the reactor will not pulse with your ' +
+        '[aurora] no microphone stream — the reactor will not pulse with your ' +
           'voice. Speech recognition is unaffected.',
       )
     }
@@ -624,7 +624,7 @@ export default function App() {
 
     const pump = () => {
       const st = store.getState()
-      // While speaking, follow JARVIS's own output rather than the mic, so the
+      // While speaking, follow AURORA's own output rather than the mic, so the
       // orb lip-syncs instead of reacting to room noise.
       const lvl =
         st.phase === 'speaking' && speaker.current
@@ -705,7 +705,7 @@ export default function App() {
         t.say(tr('Teste de áudio. Se o senhor está ouvindo isto, a saída de voz está funcionando.', 'Audio test. If you can hear this, speech output is working, sir.'))
         void t.end().then(() => {
           const d = (window as unknown as Record<string, Record<string, unknown>>).__tts
-          console.info('[jarvis] audio test →', d)
+          console.info('[aurora] audio test →', d)
           if (d && d.started === 0 && d.rescued === 0) {
             store.getState().setError(
               `No sound produced. engine=${d.engine} voice=${d.voice} error=${d.lastError || 'none'}`,

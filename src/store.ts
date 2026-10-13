@@ -13,7 +13,7 @@ export type Phase =
 /**
  * A card on the heads-up display.
  *
- * JARVIS authors the markup and picks the treatment — this is a delivery
+ * AURORA authors the markup and picks the treatment — this is a delivery
  * envelope, not a template. The `html` is sanitised before it reaches the DOM.
  */
 export type Panel = {
@@ -54,19 +54,19 @@ export type Blade = {
 
 export type Turn = {
   id: string
-  role: 'user' | 'jarvis'
+  role: 'user' | 'aurora'
   text: string
   /** Tool names invoked while producing this turn, for the HUD readout. */
   tools?: string[]
 }
 
 /**
- * An image JARVIS has put into orbit around the reactor.
+ * An image AURORA has put into orbit around the reactor.
  *
  * The reason this is a store record rather than something the scene owns: the
  * objects outlive the turn that created them and have to survive a re-render,
  * a phase change and a scene remount. Keeping them here means the scene stays
- * a pure function of state and JARVIS never has to ask what is already up.
+ * a pure function of state and AURORA never has to ask what is already up.
  */
 export type OrbitObject = {
   id: string
@@ -105,7 +105,7 @@ export type UiEffect = {
 }
 
 /**
- * Everything JARVIS can change about his own appearance.
+ * Everything AURORA can change about his own appearance.
  *
  * All of it is an override layer: at UI_DEFAULTS every field means "carry on as
  * before", so the interface is exactly the one that existed before any of this
@@ -138,7 +138,7 @@ export type UiState = {
     transcript: boolean   // the conversation log
     toolBadge: boolean    // the active-tool readout under the reactor
     suggestions: boolean  // the "try saying…" hint
-    brand: boolean        // the J.A.R.V.I.S. wordmark + status
+    brand: boolean        // the A.U.R.O.R.A. wordmark + status
   }
   effect: UiEffect | null
 }
@@ -214,7 +214,7 @@ type State = {
   phase: Phase
   /** 0..1 mic loudness, drives the reactor pulse. */
   level: number
-  /** What JARVIS is currently reading aloud or has just said. */
+  /** What AURORA is currently reading aloud or has just said. */
   caption: string
   turns: Turn[]
   activeTool: string | null
@@ -225,7 +225,7 @@ type State = {
   /** Whether the camera is on and hands are being tracked. Store-backed rather
    *  than read off the tracker, because the indicator has to re-render. */
   gestures: boolean
-  /** Set while JARVIS is taking a look, to whatever he said he was looking for.
+  /** Set while AURORA is taking a look, to whatever he said he was looking for.
    *  null when he is not. The camera light is on either way — this says why. */
   looking: string | null
   /** Transient status line during boot, e.g. the voice model download. */
@@ -238,7 +238,7 @@ type State = {
   focusedBlade: string | null
   /** A blade thrown to full screen, or null. */
   expandedBlade: string | null
-  /** JARVIS's control over his own appearance. UI_DEFAULTS == the stock look. */
+  /** AURORA's control over his own appearance. UI_DEFAULTS == the stock look. */
   ui: UiState
 
   setVoice: (v: string) => void
@@ -357,7 +357,7 @@ export const useStore = create<State>((set) => ({
     set((s) => {
       const turns = [...s.turns]
       const last = turns[turns.length - 1]
-      if (!last || last.role !== 'jarvis') return {}
+      if (!last || last.role !== 'aurora') return {}
       turns[turns.length - 1] = { ...last, text: last.text + text }
       return { turns }
     }),
@@ -442,17 +442,17 @@ export function accentFor(phase: Phase, ui: UiState): string {
 
 // Handy while dressing the scene for camera: in the dev server you can drive
 // the visuals from the console without talking, e.g.
-//   __jarvis.setPhase('tooling'); __jarvis.setLevel(0.8)
-//   __jarvis.applyUi({ accent: '#ff5a3c', reactor: { style: 'wire', spin: 3 } })
-//   __jarvis.addOrbit({ id: 'moon', src: '/vite.svg', radius: 0.6, speed: 8,
+//   __aurora.setPhase('tooling'); __aurora.setLevel(0.8)
+//   __aurora.applyUi({ accent: '#ff5a3c', reactor: { style: 'wire', spin: 3 } })
+//   __aurora.addOrbit({ id: 'moon', src: '/vite.svg', radius: 0.6, speed: 8,
 //                       size: 90, tilt: 25, opacity: 1, phase: 0 })
-//   __jarvis.fireEffect('glitch'); __jarvis.resetUi()
+//   __aurora.fireEffect('glitch'); __aurora.resetUi()
 if (import.meta.env.DEV) {
   // Not `useStore.getState()` directly: zustand replaces the state object on
   // every set, so a captured snapshot's *actions* keep working while every
-  // data field reads forever as it was at module load. `__jarvis.phase` said
+  // data field reads forever as it was at module load. `__aurora.phase` said
   // 'offline' no matter what was on screen.
-  ;(window as unknown as Record<string, unknown>).__jarvis = new Proxy(
+  ;(window as unknown as Record<string, unknown>).__aurora = new Proxy(
     {} as Record<string, unknown>,
     {
       get: (_t, key) => (useStore.getState() as Record<string | symbol, unknown>)[key],

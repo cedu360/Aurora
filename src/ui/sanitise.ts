@@ -4,7 +4,7 @@ import { BRIDGE_HTTP_URL } from '../config'
 /**
  * The safety boundary for model-authored markup.
  *
- * Everything JARVIS composes for the screen passes through here — panel bodies
+ * Everything AURORA composes for the screen passes through here — panel bodies
  * and blade markup alike. It lives in its own file so there is exactly one
  * implementation of these rules: a second surface that rendered model HTML with
  * its own slightly different allowlist would be a hole with a changelog.
@@ -16,7 +16,7 @@ import { BRIDGE_HTTP_URL } from '../config'
 /**
  * Paths that are genuinely on this machine's disk, as opposed to app-relative
  * URLs that happen to start with a slash. `/vite.svg` is one of our own static
- * assets; `/Users/you/shot.png` is a screenshot JARVIS just took.
+ * assets; `/Users/you/shot.png` is a screenshot AURORA just took.
  */
 const DISK_PATH =
   /^\/(Users|home|root|Volumes|Applications|System|Library|private|tmp|var|opt|mnt|media|srv|data)\//

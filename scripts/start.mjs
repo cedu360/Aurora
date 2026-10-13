@@ -1,12 +1,12 @@
 /**
- * One command to run JARVIS: the bridge (brain) and the Vite dev server (face)
+ * One command to run AURORA: the bridge (brain) and the Vite dev server (face)
  * together, so a student types `npm start` and nothing else.
  *
  * Two long-running processes normally mean two terminals. This launcher spawns
  * both as children, tags their output so you can tell them apart, and shuts
  * them down together on Ctrl-C — no extra dependency, just Node.
  *
- * Pass --writes to allow JARVIS to take real actions (drive the phone, the
+ * Pass --writes to allow AURORA to take real actions (drive the phone, the
  * browser, send things): `npm start -- --writes`.
  */
 
@@ -14,7 +14,7 @@ import { spawn } from 'node:child_process'
 import process from 'node:process'
 import { cpSync, existsSync, mkdirSync } from 'node:fs'
 
-const PT = (process.env.JARVIS_LANG ?? 'pt-BR').startsWith('pt')
+const PT = (process.env.AURORA_LANG ?? 'pt-BR').startsWith('pt')
 const say = (pt, en) => (PT ? pt : en)
 
 /**
@@ -111,15 +111,15 @@ process.on('SIGTERM', () => shutdown(0))
  * without widening what the bridge trusts by default.
  */
 const port = process.env.PORT
-const bridgeEnv = writes ? { JARVIS_ALLOW_WRITES: '1' } : {}
+const bridgeEnv = writes ? { AURORA_ALLOW_WRITES: '1' } : {}
 if (port) {
-  bridgeEnv.JARVIS_ALLOWED_ORIGINS = `http://localhost:${port},http://127.0.0.1:${port}`
+  bridgeEnv.AURORA_ALLOWED_ORIGINS = `http://localhost:${port},http://127.0.0.1:${port}`
   console.log(say(`  interface na porta ${port}; a ponte vai aceitá-la.\n`, `  serving the face on port ${port}; the bridge will accept it.\n`))
 }
 
 vendorWasm()
 
-console.log(say('\nJ.A.R.V.I.S. iniciando — o cérebro e a interface.\n', '\nJ.A.R.V.I.S. starting — the brain and the face.\n'))
+console.log(say('\nA.U.R.O.R.A. iniciando — o cérebro e a interface.\n', '\nA.U.R.O.R.A. starting — the brain and the face.\n'))
 // process.execPath rather than 'node': the same Node that is running this
 // script, wherever it lives, with no PATH lookup to go wrong on Windows.
 run('bridge', process.execPath, ['bridge/server.mjs', ...(writes ? ['--writes'] : [])], '36', bridgeEnv)
@@ -130,8 +130,8 @@ run('face', process.execPath, ['node_modules/vite/bin/vite.js'], '35', {})
 console.log(
   say(
     '\nQuando aparecer que o servidor está pronto, abra no Chrome o endereço que ele mostrar,\n' +
-      'clique em INICIALIZAR e diga "Ei Jarvis". Ctrl-C para tudo.\n',
+      'clique em INICIALIZAR e diga "Ei Aurora". Ctrl-C para tudo.\n',
     '\nWhen it says the dev server is ready, open the URL it prints in Chrome,\n' +
-      'click INITIALISE, and say "Hey Jarvis". Ctrl-C stops everything.\n',
+      'click INITIALISE, and say "Hey Aurora". Ctrl-C stops everything.\n',
   ),
 )

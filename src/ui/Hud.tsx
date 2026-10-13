@@ -12,7 +12,7 @@ const statusText: Record<Phase, string> = isPt
   ? {
       offline: 'DESLIGADO',
       boot: 'INICIALIZANDO',
-      dormant: 'EM ESPERA — DIGA “EI JARVIS”',
+      dormant: 'EM ESPERA — DIGA “EI AURORA”',
       waking: 'ONLINE',
       listening: 'OUVINDO',
       thinking: 'PROCESSANDO',
@@ -22,7 +22,7 @@ const statusText: Record<Phase, string> = isPt
   : {
       offline: 'OFFLINE',
       boot: 'INITIALISING',
-      dormant: 'STANDBY — SAY “HEY JARVIS”',
+      dormant: 'STANDBY — SAY “HEY AURORA”',
       waking: 'ONLINE',
       listening: 'LISTENING',
       thinking: 'PROCESSING',
@@ -69,7 +69,7 @@ function scramble(s: string, seed: number) {
 }
 
 /**
- * JARVIS's lines, arriving the way a computer would produce them.
+ * AURORA's lines, arriving the way a computer would produce them.
  *
  * The hard part is not the effect, it is that the text underneath is *live*.
  * The store appends a token at a time, so this component re-renders dozens of
@@ -172,7 +172,7 @@ export function Hud() {
   const looking = useStore((s) => s.looking)
   const ui = useStore((s) => s.ui)
 
-  // accentFor folds JARVIS's overrides in over the phase colour, so one
+  // accentFor folds AURORA's overrides in over the phase colour, so one
   // variable on the root carries a theme change into every .hud-* rule without
   // a single component knowing a theme exists.
   const colour = accentFor(phase, ui)
@@ -202,8 +202,13 @@ export function Hud() {
       <header className="hud-top">
         {ui.chrome.brand && (
           <div className="brand">
-            <span className="brand-mark">J.A.R.V.I.S.</span>
-            <span className="brand-sub">Just A Rather Very Intelligent System</span>
+            <span className="brand-mark">A.U.R.O.R.A.</span>
+            <span className="brand-sub">
+              {tr(
+                'Assistente Universal de Raciocínio, Observação e Resposta Automática',
+                'Autonomous Universal Reasoning, Observation and Response Assistant',
+              )}
+            </span>
           </div>
         )}
 
@@ -285,12 +290,12 @@ export function Hud() {
                 exit={{ opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 320, damping: 32 }}
               >
-                <span className="log-who">{t.role === 'user' ? tr('VOCÊ', 'YOU') : 'JARVIS'}</span>
+                <span className="log-who">{t.role === 'user' ? tr('VOCÊ', 'YOU') : 'AURORA'}</span>
                 {/* Only his half decodes. What the user said was never
                     transmitted from anywhere — dressing it up as machine
                     output would be a lie about where the words came from. */}
                 <span className="log-text">
-                  {t.role === 'jarvis' ? <DecodeText text={t.text} /> : t.text}
+                  {t.role === 'aurora' ? <DecodeText text={t.text} /> : t.text}
                 </span>
               </motion.div>
             ))}
@@ -324,7 +329,7 @@ export function Hud() {
 
       <footer className="hud-bottom">
         <span className="hint">
-          {tr('diga', 'say')} <b>{tr('“ei jarvis”', '“hey jarvis”')}</b> · <kbd>{tr('Espaço', 'Space')}</kbd>{' '}
+          {tr('diga', 'say')} <b>{tr('“ei aurora”', '“hey aurora”')}</b> · <kbd>{tr('Espaço', 'Space')}</kbd>{' '}
           {tr('para falar', 'to talk')} · <kbd>G</kbd> {tr('mãos', 'hands')}
           {voice && (
             <>

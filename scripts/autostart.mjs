@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * JARVIS with nobody at the keyboard: the brain and the face if they are not
+ * AURORA with nobody at the keyboard: the brain and the face if they are not
  * already up, then his own window, which powers itself on.
  *
  * This is what the Windows start-up shortcut runs (`npm run inicio-automatico`
@@ -8,13 +8,13 @@
  * `npm run janela`.
  *
  * Whoever starts the servers looks after them. They are restarted if they fall
- * over, and switched off once no JARVIS window has been open for a while — so
+ * over, and switched off once no AURORA window has been open for a while — so
  * closing the window is how you turn him off, and the desktop shortcut is how
  * you turn him back on. If the servers were already running (an `npm start`
  * in a PowerShell window), this only opens a window and leaves: what someone
  * else started is theirs to stop.
  *
- * Everything the servers print goes to logs/jarvis.log, since at login there is
+ * Everything the servers print goes to logs/aurora.log, since at login there is
  * no console to print it to.
  */
 
@@ -41,12 +41,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(ROOT)
 loadLocalEnv()
 
-const PT = (process.env.JARVIS_LANG ?? 'pt-BR').startsWith('pt')
+const PT = (process.env.AURORA_LANG ?? 'pt-BR').startsWith('pt')
 const say = (pt, en) => (PT ? pt : en)
 const WINDOWS = platform() === 'win32'
 
 const FACE_PORT = Number(process.env.PORT) || 5173
-const BRIDGE_PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
+const BRIDGE_PORT = Number(process.env.AURORA_BRIDGE_PORT ?? 8787)
 const WRITES = process.argv.includes('--writes')
 
 /** How long the servers get to come up. Right after login, with the disk busy, a cold start is slow. */
@@ -64,7 +64,7 @@ const MAX_RESTARTS = 3
 const RESTART_WINDOW_MS = 600_000
 
 const LOG_DIR = join(ROOT, 'logs')
-const LOG = join(LOG_DIR, 'jarvis.log')
+const LOG = join(LOG_DIR, 'aurora.log')
 /** Held by the launcher that owns the servers. */
 const LOCK = join(LOG_DIR, 'janela.lock')
 /** Touched by any other launcher that has just opened a window, so the owner waits for it. */
@@ -121,10 +121,10 @@ async function bridgeHealth() {
   }
 }
 
-/** Whether JARVIS's face — and not some other app that took the port — answers there. */
+/** Whether AURORA's face — and not some other app that took the port — answers there. */
 async function faceUp(port) {
   const r = await get(port, '/')
-  return r?.status === 200 && r.body.includes('<title>J.A.R.V.I.S.</title>')
+  return r?.status === 200 && r.body.includes('<title>A.U.R.O.R.A.</title>')
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -157,10 +157,10 @@ function which(name) {
 /**
  * Chrome, or Edge where there is no Chrome. Both are Chromium, so the flags
  * below mean the same to either — and both ship a speech recogniser, which
- * Firefox does not. JARVIS_NAVEGADOR names another.
+ * Firefox does not. AURORA_NAVEGADOR names another.
  */
 function findBrowser() {
-  const own = process.env.JARVIS_NAVEGADOR
+  const own = process.env.AURORA_NAVEGADOR
   if (own) return existsSync(own) ? own : which(own)
   if (WINDOWS) {
     const bases = [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean)
@@ -196,8 +196,8 @@ function findBrowser() {
  */
 function profileDir() {
   return WINDOWS
-    ? join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Jarvis', 'Navegador')
-    : join(homedir(), '.jarvis', 'navegador')
+    ? join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Aurora', 'Navegador')
+    : join(homedir(), '.aurora', 'navegador')
 }
 
 const browser = { alive: false, everAlive: false }
@@ -404,7 +404,7 @@ async function up() {
 log(say('início', 'start'))
 
 if (await up()) {
-  log(say('o JARVIS já estava no ar; só abrindo a janela', 'JARVIS was already running; only opening a window'))
+  log(say('a AURORA já estava no ar; só abrindo a janela', 'AURORA was already running; only opening a window'))
   knock()
   openWindow(facePort)
   closeSync(logFd)
@@ -414,7 +414,7 @@ if (await up()) {
 if (!takeLock()) {
   // A second click on the shortcut while the first is still bringing it up.
   // That one opens the window when it is ready; a second would be a duplicate.
-  log(say('outro lançador já está ligando o JARVIS; a janela dele vai abrir', 'another launcher is starting JARVIS; its window will open'))
+  log(say('outro lançador já está ligando a AURORA; a janela dela vai abrir', 'another launcher is starting AURORA; its window will open'))
   knock()
   closeSync(logFd)
   process.exit(0)
@@ -436,7 +436,7 @@ log(say(`pronto em http://localhost:${facePort}`, `ready at http://localhost:${f
 openWindow(facePort)
 
 /**
- * Keep the servers alive while any JARVIS window is open, and no longer.
+ * Keep the servers alive while any AURORA window is open, and no longer.
  *
  * "Open" is any of: the browser process this launcher started is still
  * running, the bridge has a page connected (a window opened another way, or
@@ -490,7 +490,7 @@ while (!finishing) {
   if (!seen && !browser.everAlive && now - began < FIRST_PAGE_MS) continue
   emptySince ??= now
   if (now - emptySince >= EMPTY_MS) {
-    log(say('nenhuma janela do JARVIS aberta; desligando', 'no JARVIS window open; switching off'))
+    log(say('nenhuma janela da AURORA aberta; desligando', 'no AURORA window open; switching off'))
     await finish(0)
   }
 }

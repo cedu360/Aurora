@@ -5,7 +5,7 @@ import type { Drive } from './Scene'
 
 /**
  * A shell of points around the core. Each one drifts on its own orbit and gets
- * pushed outward by loudness, so the whole cloud expands when JARVIS speaks.
+ * pushed outward by loudness, so the whole cloud expands when AURORA speaks.
  */
 
 const COUNT = 4000

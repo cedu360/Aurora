@@ -23,7 +23,7 @@ export type AskHandlers = {
 }
 
 /** The stream for the turn in flight, so a barge-in can abort it. Without this
- *  cutting JARVIS off only silenced the speaker: the model kept generating,
+ *  cutting AURORA off only silenced the speaker: the model kept generating,
  *  and kept billing, into a browser nobody was listening to. */
 let active: ReturnType<typeof client.beta.messages.stream> | null = null
 let cancelled = false
@@ -32,7 +32,7 @@ let cancelled = false
  * A server-side tool loop that runs long enough gets paused rather than
  * finished: `stop_reason: 'pause_turn'`, resumable by replaying the assistant
  * turn back with no extra user message. Left unhandled it looks like a short
- * answer and reads as JARVIS trailing off. Continuations are bounded because
+ * answer and reads as AURORA trailing off. Continuations are bounded because
  * this is a voice assistant — after a few the honest thing is to say so rather
  * than keep the user in silence.
  */
@@ -76,7 +76,7 @@ export async function ask(
       ...(s.token ? { authorization_token: s.token } : {}),
     })),
     tools: [
-      // Anthropic-hosted search. Free of any setup, and it makes JARVIS able to
+      // Anthropic-hosted search. Free of any setup, and it makes AURORA able to
       // answer "what happened today" without wiring up a search provider.
       { type: 'web_search_20260209' as const, name: 'web_search' as const },
       ...servers.map((s) => ({
@@ -165,7 +165,7 @@ export async function ask(
 }
 
 /**
- * Barge-in. Stops the generation rather than just muting it, so cutting JARVIS
+ * Barge-in. Stops the generation rather than just muting it, so cutting AURORA
  * off stops the tokens and the bill along with the voice.
  */
 export function cancel(): void {
@@ -179,7 +179,7 @@ export function cancel(): void {
  * This is what is *configured*, not what is reachable. Anthropic dials these
  * servers from its own infrastructure when a tool actually runs, so the browser
  * has no way to check one without spending a turn — a revoked token shows green
- * here and only fails at the moment JARVIS tries to use it.
+ * here and only fails at the moment AURORA tries to use it.
  */
 export function connectedLabels(): string[] {
   return activeServers().map((s) => s.label)

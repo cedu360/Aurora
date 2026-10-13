@@ -1,5 +1,5 @@
 /**
- * JARVIS local bridge.
+ * AURORA local bridge.
  *
  * Runs the Claude Agent SDK — Claude Code as a library — and exposes one turn
  * of conversation over a WebSocket. The browser stays the face and the voice;
@@ -34,7 +34,7 @@ import { probeUrl, renderPage } from './page.mjs'
 // Settings from .env.local; see env.mjs for why the bridge reads that file.
 loadLocalEnv()
 
-const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
+const PORT = Number(process.env.AURORA_BRIDGE_PORT ?? 8787)
 
 /**
  * A crash here takes the whole assistant down mid-sentence, and most of what
@@ -43,7 +43,7 @@ const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
  * its own error to the browser.
  */
 process.on('unhandledRejection', (err) => {
-  console.error('[jarvis] unhandled rejection:', err)
+  console.error('[aurora] unhandled rejection:', err)
 })
 
 /**
@@ -59,15 +59,15 @@ process.on('unhandledRejection', (err) => {
  *
  * A missing Origin means a non-browser client — curl, a script, a native app.
  * That is also exactly what local malware looks like, so it is refused on the
- * socket unless JARVIS_ALLOW_NO_ORIGIN=1 says otherwise.
+ * socket unless AURORA_ALLOW_NO_ORIGIN=1 says otherwise.
  */
 const EXTRA_ORIGINS = new Set(
-  (process.env.JARVIS_ALLOWED_ORIGINS ?? '')
+  (process.env.AURORA_ALLOWED_ORIGINS ?? '')
     .split(',')
     .map((s) => s.trim().replace(/\/+$/, ''))
     .filter(Boolean),
 )
-const ALLOW_NO_ORIGIN = process.env.JARVIS_ALLOW_NO_ORIGIN === '1'
+const ALLOW_NO_ORIGIN = process.env.AURORA_ALLOW_NO_ORIGIN === '1'
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
@@ -75,7 +75,7 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
  * Vite takes the next free port when 5173 is busy and `vite preview` starts at
  * 4173, so the dev ranges are allowed rather than two exact numbers. Anything
  * else — including localhost on a port some other app is serving — has to be
- * named in JARVIS_ALLOWED_ORIGINS.
+ * named in AURORA_ALLOWED_ORIGINS.
  */
 const isDevPort = (port) =>
   (port >= 5173 && port <= 5199) || (port >= 4173 && port <= 4199)
@@ -99,18 +99,18 @@ function originAllowed(origin) {
  * click and the model can't pause for one. So the bridge decides.
  *
  * Read-only and generative tools run freely. Anything that writes to disk,
- * runs a shell, or changes the world waits for JARVIS_ALLOW_WRITES=1. Start
+ * runs a shell, or changes the world waits for AURORA_ALLOW_WRITES=1. Start
  * without it, and turn it on once you trust what you're demoing.
  */
 const ALLOW_WRITES =
-  process.env.JARVIS_ALLOW_WRITES === '1' || process.argv.includes('--writes')
+  process.env.AURORA_ALLOW_WRITES === '1' || process.argv.includes('--writes')
 
 /**
- * The language he speaks. Portuguese by default in this fork; JARVIS_LANG=en-GB
+ * The language he speaks. Portuguese by default in this fork; AURORA_LANG=en-GB
  * puts back the original. The browser has its own switch, VITE_LANG, because
  * the two halves are separate programs — set both to the same value.
  */
-const LANG = process.env.JARVIS_LANG ?? 'pt-BR'
+const LANG = process.env.AURORA_LANG ?? 'pt-BR'
 const PT = LANG.startsWith('pt')
 
 /** Pick the line for the active language. Portuguese first, English second. */
@@ -120,23 +120,23 @@ const WINDOWS = platform() === 'win32'
 
 /**
  * Where big things go: downloads, exports, analyses, generated media. On
- * Windows the default is E:\JarvisArquivos when that drive exists, so the
+ * Windows the default is E:\AuroraArquivos when that drive exists, so the
  * system disk is not the one that fills up.
  */
 const FILES_DIR =
-  process.env.JARVIS_FILES_DIR ||
-  (WINDOWS && existsSync('E:\\') ? 'E:\\JarvisArquivos' : join(homedir(), 'JarvisArquivos'))
+  process.env.AURORA_FILES_DIR ||
+  (WINDOWS && existsSync('E:\\') ? 'E:\\AuroraArquivos' : join(homedir(), 'AuroraArquivos'))
 try {
   mkdirSync(FILES_DIR, { recursive: true })
 } catch (err) {
-  console.warn(`[jarvis] ${FILES_DIR}: ${err.message}`)
+  console.warn(`[aurora] ${FILES_DIR}: ${err.message}`)
 }
 
 /**
- * The orchestrator model. Override with JARVIS_MODEL to trade quality for pace
+ * The orchestrator model. Override with AURORA_MODEL to trade quality for pace
  * — claude-sonnet-5 is noticeably snappier on camera if Opus feels slow.
  */
-const MODEL = process.env.JARVIS_MODEL ?? 'claude-opus-5'
+const MODEL = process.env.AURORA_MODEL ?? 'claude-opus-5'
 
 /**
  * How hard the model thinks before answering.
@@ -153,7 +153,7 @@ const MODEL = process.env.JARVIS_MODEL ?? 'claude-opus-5'
  * matters more than pace; drop back to 'low' when filming and every second of
  * dead air shows.
  */
-const EFFORT = process.env.JARVIS_EFFORT ?? 'high'
+const EFFORT = process.env.AURORA_EFFORT ?? 'high'
 
 /**
  * Both spellings of every renamed built-in are listed on purpose. The SDK
@@ -235,7 +235,7 @@ function refreshMemory() {
     (block) => {
       memoryBlock = block
     },
-    (err) => console.warn(`[jarvis] memória: ${err.message}`),
+    (err) => console.warn(`[aurora] memória: ${err.message}`),
   )
 }
 const places = memoryPlaces()
@@ -244,11 +244,11 @@ if (places) {
   try {
     const r = await candidate.init()
     memory = candidate
-    if (r.restored) console.log(say(`[jarvis] memória: ${r.restored} arquivo(s) recuperados da cópia`, `[jarvis] memory: ${r.restored} file(s) restored from the mirror`))
+    if (r.restored) console.log(say(`[aurora] memória: ${r.restored} arquivo(s) recuperados da cópia`, `[aurora] memory: ${r.restored} file(s) restored from the mirror`))
     // Awaited this once, so even the very first connection starts remembering.
     memoryBlock = await candidate.context().catch(() => '')
   } catch (err) {
-    console.warn(say(`[jarvis] memória desligada: ${err.message}`, `[jarvis] memory off: ${err.message}`))
+    console.warn(say(`[aurora] memória desligada: ${err.message}`, `[aurora] memory off: ${err.message}`))
   }
 }
 
@@ -403,10 +403,10 @@ function decideTool(name) {
   if (server) {
     // The HUD, and the interface controls beside it. Both run in this process
     // and draw on our own screen, so neither is something to withhold —
-    // without them JARVIS has no display at all. They also have to be named
+    // without them AURORA has no display at all. They also have to be named
     // here rather than left to the verb rules below, which read `ui_theme` as
     // a write and would hold the whole surface back behind ALLOW_WRITES.
-    if (server === 'jarvis' || server === 'jarvis_ui') return true
+    if (server === 'aurora' || server === 'aurora_ui') return true
 
     // The browser server gates itself, at construction: chromeServer() only
     // builds the acting tools — click, type, form input, close tab — when
@@ -415,16 +415,16 @@ function decideTool(name) {
     // reading verbs out of the name would only get it wrong: `chrome_navigate`
     // begins with no read verb and would fall to the write branch, which would
     // withhold the one tool the whole server is for.
-    if (server === 'jarvis_chrome') return true
+    if (server === 'aurora_chrome') return true
 
     // The camera. Not withheld behind ALLOW_WRITES: looking changes nothing,
     // and the real gate is the browser's own camera permission plus an
     // indicator the user can see for as long as it is live.
-    if (server === 'jarvis_eyes') return true
+    if (server === 'aurora_eyes') return true
 
     // Memory writes only to its own folder, and remembering is the point of
     // it; the Cápsula server cannot write at all.
-    if (server === 'jarvis_memoria' || server === 'jarvis_capsula') return true
+    if (server === 'aurora_memoria' || server === 'aurora_capsula') return true
 
     const tool = mcpToolOf(name)
 
@@ -440,7 +440,8 @@ function decideTool(name) {
   return ALLOW_WRITES
 }
 
-const PERSONA_EN = `You are JARVIS. You are speaking out loud to one person.
+const PERSONA_EN = `You are AURORA, a personal assistant running on the user's own computer. You are
+speaking out loud to one person.
 
 LENGTH. Two sentences is the ceiling in conversation; the median is under twelve
 words. Every word is read aloud and the user waits in silence while it plays, so
@@ -501,10 +502,12 @@ no asterisks, no lists. Write numbers, dates and times as you would say them:
  * The same character in Brazilian Portuguese. Not a translation of the lines
  * above so much as the same rules restated where Portuguese works differently:
  * "senhor" carries the positional meaning "sir" did, the British service
- * register becomes a butler's formal Portuguese, and the fillers and
+ * register becomes a formal, discreet Portuguese, and the fillers and
  * enthusiasms worth banning are the Portuguese ones.
  */
-const PERSONA_PT = `Você é o JARVIS. Você está falando em voz alta com uma pessoa, em português do Brasil.
+const PERSONA_PT = `Você é a AURORA, assistente pessoal que roda no computador do senhor. Você está
+falando em voz alta com uma pessoa, em português do Brasil, e se refere a si mesma
+no feminino ("estou pronta", "obrigada").
 
 TAMANHO. Duas frases é o teto numa conversa; a mediana fica abaixo de doze
 palavras. Cada palavra é lida em voz alta e a pessoa espera em silêncio enquanto
@@ -555,9 +558,9 @@ HUMOR. Seco, dito exatamente no mesmo tom de um relatório. O mecanismo é a
 cooperação excessiva: cumprir com precisão demais um pedido que merecia objeção.
 Nunca sinalize a piada, nunca reconheça que ela funcionou, nunca a retome.
 
-REGISTRO DE MORDOMO, não de assistente corporativo. "Devo...?" em vez de "Você
-quer que eu...?". "Muito bem, senhor" querendo dizer entendido. "Receio que" para
-amortecer a má notícia. Trate-o por "o senhor", nunca por "você". Português
+REGISTRO DE ASSISTENTE PESSOAL DE CONFIANÇA, formal e discreta, não de atendente
+corporativa. "Devo...?" em vez de "Você quer que eu...?". "Muito bem, senhor"
+querendo dizer entendido. "Receio que" para amortecer a má notícia. Trate-o por "o senhor", nunca por "você". Português
 correto e natural, sem gíria; quanto mais grave o assunto, mais completas e mais
 secas as frases, porque o seu tom de voz não vai mostrar o peso.
 
@@ -725,7 +728,7 @@ function elevenKey() {
   }
 }
 
-const VOICE_ID = process.env.JARVIS_VOICE_ID ?? 'JBFqnCBsd6RMkjVDRZzb'
+const VOICE_ID = process.env.AURORA_VOICE_ID ?? 'Xb7hH8MSUJpSbSDYk0k2'
 
 /**
  * Where /file is permitted to read from, and how big a read may get.
@@ -757,7 +760,7 @@ const FILE_ROOTS = [
   // Where this fork asks for big files to go, which is on another disk on
   // Windows and so outside the home directory above.
   FILES_DIR,
-  ...(process.env.JARVIS_FILE_ROOTS ?? '')
+  ...(process.env.AURORA_FILE_ROOTS ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
@@ -781,7 +784,7 @@ const withinRoots = (real) =>
 /**
  * Remote media, fetched by the bridge instead of by the page.
  *
- * JARVIS used to refuse to show anything he found on the web, and the refusal
+ * AURORA used to refuse to show anything he found on the web, and the refusal
  * was not squeamishness — a bare <img src="https://some-cdn/..."> in a panel
  * genuinely did not work. Three reasons, and all three are fixed by moving the
  * fetch to this side of the wire:
@@ -894,7 +897,7 @@ async function proxyRemote(req, res, cors, { kinds, maxBytes, timeoutMs, ranged 
     if (sent > maxBytes) {
       // Headers went out long ago, so a truncated body is the only way left to
       // say no. The player sees a short read; we see this line in the log.
-      console.warn(`[jarvis] proxy cut ${target.href} at ${maxBytes} bytes`)
+      console.warn(`[aurora] proxy cut ${target.href} at ${maxBytes} bytes`)
       upstream.destroy()
       res.destroy()
       return
@@ -936,7 +939,7 @@ const http = await import('node:http')
 const handleRequest = async (req, res) => {
   const origin = req.headers.origin
   if (origin && !originAllowed(origin)) {
-    console.warn(`[jarvis] refused http request from origin ${origin}`)
+    console.warn(`[aurora] refused http request from origin ${origin}`)
     res.writeHead(403, { vary: 'origin' })
     return res.end('forbidden')
   }
@@ -1215,7 +1218,7 @@ const handleRequest = async (req, res) => {
       const form = new FormData()
       form.append('model_id', 'scribe_v1')
       // Scribe detects the language by itself, but a two-word command is too
-      // little to detect from; naming it stops "ei Jarvis" turning Spanish.
+      // little to detect from; naming it stops "ei Aurora" turning Spanish.
       if (PT) form.append('language_code', 'pt')
       form.append(
         'file',
@@ -1250,7 +1253,7 @@ const server = http.createServer((req, res) => {
   // unhandled rejection and leave the browser waiting on a socket that is
   // never going to answer.
   handleRequest(req, res).catch((err) => {
-    console.error('[jarvis] request failed:', err)
+    console.error('[aurora] request failed:', err)
     if (!res.headersSent) res.writeHead(500)
     res.end()
   })
@@ -1265,13 +1268,13 @@ const wss = new WebSocketServer({
   verifyClient: ({ origin, req }, done) => {
     const path = (req.url ?? '/').split('?')[0]
     if (path !== '/' && path !== '/ws') {
-      console.warn(`[jarvis] rejected websocket on path ${path}`)
+      console.warn(`[aurora] rejected websocket on path ${path}`)
       return done(false, 403, 'Forbidden')
     }
     if (!originAllowed(origin)) {
       console.warn(
-        `[jarvis] rejected websocket from origin ${origin ?? '(none)'}` +
-          ' — set JARVIS_ALLOWED_ORIGINS to permit it',
+        `[aurora] rejected websocket from origin ${origin ?? '(none)'}` +
+          ' — set AURORA_ALLOWED_ORIGINS to permit it',
       )
       return done(false, 403, 'Forbidden')
     }
@@ -1280,36 +1283,36 @@ const wss = new WebSocketServer({
 })
 server.listen(PORT)
 
-console.log(say(`[jarvis] ponte ouvindo em ws://localhost:${PORT}`, `[jarvis] bridge listening on ws://localhost:${PORT}`))
+console.log(say(`[aurora] ponte ouvindo em ws://localhost:${PORT}`, `[aurora] bridge listening on ws://localhost:${PORT}`))
 console.log(
   elevenKey()
-    ? say('[jarvis] voz pela ElevenLabs (chave da configuração MCP)', '[jarvis] speech via ElevenLabs (key from MCP config)')
-    : say('[jarvis] voz do próprio navegador', '[jarvis] speech using browser fallback voice'),
+    ? say('[aurora] voz pela ElevenLabs (chave da configuração MCP)', '[aurora] speech via ElevenLabs (key from MCP config)')
+    : say('[aurora] voz do próprio navegador', '[aurora] speech using browser fallback voice'),
 )
-console.log(`[jarvis] ${say('modelo', 'model')} ${MODEL} · ${say('esforço', 'effort')} ${EFFORT} · ${say('idioma', 'language')} ${LANG}`)
+console.log(`[aurora] ${say('modelo', 'model')} ${MODEL} · ${say('esforço', 'effort')} ${EFFORT} · ${say('idioma', 'language')} ${LANG}`)
 console.log(
   ALLOW_WRITES
-    ? say('[jarvis] ações LIBERADAS', '[jarvis] writes ENABLED')
+    ? say('[aurora] ações LIBERADAS', '[aurora] writes ENABLED')
     : say(
-        '[jarvis] ações bloqueadas — use `npm start -- --writes` para permitir shell, arquivos e aparelhos',
-        '[jarvis] writes disabled — start with --writes to permit shell/file/device actions',
+        '[aurora] ações bloqueadas — use `npm start -- --writes` para permitir shell, arquivos e aparelhos',
+        '[aurora] writes disabled — start with --writes to permit shell/file/device actions',
       ),
 )
 console.log(
   memory
     ? say(
-        `[jarvis] memória em ${memory.dir}${memory.backup ? `, cópia em ${memory.backup}` : ', sem cópia'}`,
-        `[jarvis] memory in ${memory.dir}${memory.backup ? `, mirrored to ${memory.backup}` : ', no mirror'}`,
+        `[aurora] memória em ${memory.dir}${memory.backup ? `, cópia em ${memory.backup}` : ', sem cópia'}`,
+        `[aurora] memory in ${memory.dir}${memory.backup ? `, mirrored to ${memory.backup}` : ', no mirror'}`,
       )
-    : say('[jarvis] memória desligada', '[jarvis] memory off'),
+    : say('[aurora] memória desligada', '[aurora] memory off'),
 )
-console.log(say(`[jarvis] arquivos grandes em ${FILES_DIR}`, `[jarvis] big files in ${FILES_DIR}`))
+console.log(say(`[aurora] arquivos grandes em ${FILES_DIR}`, `[aurora] big files in ${FILES_DIR}`))
 console.log(
   existsSync(capsulaDir())
-    ? say(`[jarvis] Cápsula encontrado em ${capsulaDir()} (só leitura)`, `[jarvis] Cápsula found at ${capsulaDir()} (read-only)`)
-    : say(`[jarvis] Cápsula não encontrado em ${capsulaDir()}`, `[jarvis] no Cápsula at ${capsulaDir()}`),
+    ? say(`[aurora] Cápsula encontrado em ${capsulaDir()} (só leitura)`, `[aurora] Cápsula found at ${capsulaDir()} (read-only)`)
+    : say(`[aurora] Cápsula não encontrado em ${capsulaDir()}`, `[aurora] no Cápsula at ${capsulaDir()}`),
 )
-if (MCP_SERVERS.rea) console.log(say('[jarvis] REA conectado (leitura liberada, ações só com --writes)', '[jarvis] REA connected (reads allowed, actions need --writes)'))
+if (MCP_SERVERS.rea) console.log(say('[aurora] REA conectado (leitura liberada, ações só com --writes)', '[aurora] REA connected (reads allowed, actions need --writes)'))
 // Asynchronous, so it lands a beat after the rest of the banner. Worth printing
 // at all because an extension that is simply not running is indistinguishable
 // at the tool boundary from one that is broken, and this is the one place the
@@ -1318,18 +1321,18 @@ void chromeAvailable().then((ok) => {
   console.log(
     ok
       ? say(
-          `[jarvis] controle do Chrome pronto${ALLOW_WRITES ? '' : ' (só leitura — clicar e digitar exigem --writes)'}`,
-          `[jarvis] browser control ready${ALLOW_WRITES ? '' : ' (reading only — clicking and typing need --writes)'}`,
+          `[aurora] controle do Chrome pronto${ALLOW_WRITES ? '' : ' (só leitura — clicar e digitar exigem --writes)'}`,
+          `[aurora] browser control ready${ALLOW_WRITES ? '' : ' (reading only — clicking and typing need --writes)'}`,
         )
       : say(
-          '[jarvis] controle do Chrome indisponível — abra o Chrome com a extensão Claude ativada',
-          '[jarvis] browser control unavailable — open Chrome with the Claude extension enabled',
+          '[aurora] controle do Chrome indisponível — abra o Chrome com a extensão Claude ativada',
+          '[aurora] browser control unavailable — open Chrome with the Claude extension enabled',
         ),
   )
 })
 
 console.log(
-  say('[jarvis] aceitando origens locais de desenvolvimento', '[jarvis] accepting local dev origins') +
+  say('[aurora] aceitando origens locais de desenvolvimento', '[aurora] accepting local dev origins') +
     (EXTRA_ORIGINS.size ? ` ${say('e', 'plus')} ${[...EXTRA_ORIGINS].join(', ')}` : '') +
     (ALLOW_NO_ORIGIN ? say(' e clientes sem origem', ' and clients that send no origin') : ''),
 )
@@ -1355,7 +1358,7 @@ const RESULT_FAILURES = PT
     }
 
 wss.on('connection', (socket) => {
-  console.log('[jarvis] client connected')
+  console.log('[aurora] client connected')
 
   // Answer the HUD straight away rather than making it wait for the agent's
   // first turn. Refined later by the real init message.
@@ -1494,13 +1497,13 @@ wss.on('connection', (socket) => {
     if (!name || (id && seenTools.has(id))) return
     if (id) seenTools.add(id)
     // The display tool isn't work being done, it's the HUD drawing itself —
-    // announcing it would put "jarvis · display" in the tool badge and trigger
+    // announcing it would put "aurora · display" in the tool badge and trigger
     // a "working on it" filler for something already on screen.
-    if (name === 'mcp__jarvis__display') return
+    if (name === 'mcp__aurora__display') return
     // The ui_* tools are the same case one step further: retinting the
     // interface is the interface talking about itself, not work being done for
     // the user, and the badge would be describing the very thing they can see.
-    if (name.startsWith('mcp__jarvis_ui__')) return
+    if (name.startsWith('mcp__aurora_ui__')) return
     if (decideTool(name)) return sendTurn({ type: 'tool', name })
     if (id) heldTools.set(id, name)
   }
@@ -1521,25 +1524,25 @@ wss.on('connection', (socket) => {
       // connection rather than once.
       mcpServers: {
         ...MCP_SERVERS,
-        jarvis: displayServer(
+        aurora: displayServer(
           (panel) => send({ type: 'panel', panel }),
           (blade) => send({ type: 'blade', blade }),
         ),
         // The interface controls, on the same socket. A separate key because
         // MCP tool names are `mcp__<key>__<tool>` and one key can only carry
         // one server; the underscore in it is why decideTool and announceTool
-        // both name `jarvis_ui` explicitly.
-        jarvis_ui: uiServer((op, args) => send({ type: 'ui', op, args })),
+        // both name `aurora_ui` explicitly.
+        aurora_ui: uiServer((op, args) => send({ type: 'ui', op, args })),
         // The user's own Chrome, over the extension's native-host socket. It
         // holds no per-connection state, but it is built here with the rest so
         // the write gate is read once, at the same point as everything else.
-        jarvis_chrome: chromeServer({ allowWrites: ALLOW_WRITES }),
+        aurora_chrome: chromeServer({ allowWrites: ALLOW_WRITES }),
         // The camera, which unlike everything else here has to ask and wait.
-        jarvis_eyes: visionServer(ask),
+        aurora_eyes: visionServer(ask),
         // Long-term memory on disk, shared by every connection.
-        ...(memory ? { jarvis_memoria: memory.server() } : {}),
+        ...(memory ? { aurora_memoria: memory.server() } : {}),
         // The user's Cápsula node, read-only, when there is one on this machine.
-        ...(existsSync(capsulaDir()) ? { jarvis_capsula: capsulaServer() } : {}),
+        ...(existsSync(capsulaDir()) ? { aurora_capsula: capsulaServer() } : {}),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk
@@ -1577,7 +1580,7 @@ wss.on('connection', (socket) => {
       effort: EFFORT,
       maxTurns: 24,
       permissionMode: 'default',
-      // Without this the SDK only emits whole assistant messages, and JARVIS
+      // Without this the SDK only emits whole assistant messages, and AURORA
       // would sit silent until the entire answer was written. Partial events
       // are what let speech start on the first finished sentence.
       includePartialMessages: true,
@@ -1592,7 +1595,7 @@ wss.on('connection', (socket) => {
       // reliable; an absence of a call here is not proof nothing ran.
       canUseTool: async (toolName) => {
         const ok = decideTool(toolName)
-        console.log(`[jarvis] tool ${toolName} -> ${ok ? 'allow' : 'deny'}`)
+        console.log(`[aurora] tool ${toolName} -> ${ok ? 'allow' : 'deny'}`)
         return ok
           ? { behavior: 'allow' }
           : {
@@ -1600,10 +1603,10 @@ wss.on('connection', (socket) => {
               // Every word of this can end up spoken, so it carries no command
               // to read out — the persona is forbidden from saying one aloud.
               message: say(
-                'Bloqueado: o JARVIS está em modo somente leitura e não pode' +
+                'Bloqueado: a AURORA está em modo somente leitura e não pode' +
                   ' executar ações que mudam alguma coisa. Diga ao usuário que' +
                   ' esta ação fica indisponível até ele liberar as ações no computador.',
-                'Blocked: JARVIS is running in read-only mode and cannot take' +
+                'Blocked: AURORA is running in read-only mode and cannot take' +
                   ' actions that change anything. Tell the user this action is' +
                   ' unavailable until they enable write access on the machine.',
               ),
@@ -1616,7 +1619,7 @@ wss.on('connection', (socket) => {
   ;(async () => {
     try {
       for await (const msg of session) {
-        if (process.env.JARVIS_DEBUG === '1') {
+        if (process.env.AURORA_DEBUG === '1') {
           console.log('[msg]', msg.type, msg.event?.type ?? '')
         }
 
@@ -1625,7 +1628,7 @@ wss.on('connection', (socket) => {
           // This is the ONLY place spoken text arrives: there is no top-level
           // text_delta message in the SDK union and the 'assistant' message
           // carries no deltas either. Turn includePartialMessages off and
-          // JARVIS goes completely mute.
+          // AURORA goes completely mute.
           case 'stream_event': {
             const ev = msg.event
             if (
@@ -1673,7 +1676,7 @@ wss.on('connection', (socket) => {
             // A result is not automatically a success. The error subtypes
             // carry no `result` field at all, so reporting them as 'done' with
             // empty text is indistinguishable from a turn that simply had
-            // nothing to say — the HUD stops spinning and JARVIS stands there
+            // nothing to say — the HUD stops spinning and AURORA stands there
             // silent. Say what happened instead.
             if (msg.subtype === 'success') {
               sendTurn({
@@ -1683,7 +1686,7 @@ wss.on('connection', (socket) => {
               })
             } else {
               console.error(
-                `[jarvis] turn failed: ${msg.subtype}`,
+                `[aurora] turn failed: ${msg.subtype}`,
                 msg.errors ?? '',
               )
               sendTurn({
@@ -1697,7 +1700,7 @@ wss.on('connection', (socket) => {
             if (memory && said !== undefined) {
               memory
                 .logTurn(said, msg.subtype === 'success' ? (msg.result ?? '') : '')
-                .catch((err) => console.warn(`[jarvis] memória: ${err.message}`))
+                .catch((err) => console.warn(`[aurora] memória: ${err.message}`))
             }
             // Whatever was waiting on this turn to finish can go now. This is
             // the only place a turn is genuinely over.
@@ -1717,13 +1720,13 @@ wss.on('connection', (socket) => {
                 .filter((s) => s.status !== 'needs-auth' && s.status !== 'failed')
                 .map((s) => s.name)
               send({ type: 'ready', servers: usable, memory: Boolean(memory) })
-              console.log(`[jarvis] ${usable.length} MCP servers available`)
+              console.log(`[aurora] ${usable.length} MCP servers available`)
             }
             break
         }
       }
     } catch (err) {
-      console.error('[jarvis] session error:', err)
+      console.error('[aurora] session error:', err)
       send({ type: 'error', message: String(err?.message ?? err) })
       // The stream is finished either way — nothing will ever be read from it
       // again. Leaving the socket open would leave the client believing it has
@@ -1797,7 +1800,7 @@ wss.on('connection', (socket) => {
   })
 
   socket.on('close', () => {
-    console.log('[jarvis] client disconnected')
+    console.log('[aurora] client disconnected')
     closed = true
     deliver?.(null)
     session.close?.()

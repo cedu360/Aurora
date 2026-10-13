@@ -5,7 +5,7 @@ import { fetchText, peek, proxyError } from './net.mjs'
  * Showing a web page on the display.
  *
  * The problem this solves is specific and, until now, unsolvable from the
- * browser side. JARVIS finds an article and wants to put it on screen. Three
+ * browser side. AURORA finds an article and wants to put it on screen. Three
  * separate mechanisms stop him:
  *
  *   1. `X-Frame-Options: DENY` / `frame-ancestors` — most publishers refuse to
@@ -53,7 +53,7 @@ import { fetchText, peek, proxyError } from './net.mjs'
 const SCROLL_SHIM = `
 addEventListener('message', function (e) {
   var d = e.data
-  if (!d || d.jarvis !== 'scroll') return
+  if (!d || d.aurora !== 'scroll') return
   if (d.to === 'top') { window.scrollTo({ top: 0, behavior: 'smooth' }); return }
   if (d.to === 'bottom') { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); return }
   window.scrollBy({ top: d.dy || 0, behavior: d.smooth ? 'smooth' : 'auto' })
@@ -62,7 +62,7 @@ addEventListener('message', function (e) {
 // document that has rendered but not yet run anything. Without this the first
 // scroll of every article is silently dropped, which reads as scrolling being
 // broken rather than early.
-try { parent.postMessage({ jarvis: 'ready' }, '*') } catch (e) {}
+try { parent.postMessage({ aurora: 'ready' }, '*') } catch (e) {}
 `
 
 const MAX_PAGE_BYTES = 8 * 1024 * 1024

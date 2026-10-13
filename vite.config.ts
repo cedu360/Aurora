@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     // Honour PORT so a second instance can run alongside the first. The bridge
     // only accepts sockets from localhost:5173-5199, so stay inside that range
-    // or set JARVIS_ALLOWED_ORIGINS to match.
+    // or set AURORA_ALLOWED_ORIGINS to match.
     port: Number(process.env.PORT) || 5173,
   },
   optimizeDeps: {

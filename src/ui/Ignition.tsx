@@ -5,7 +5,7 @@ import { t } from '../lib/lang'
  * The start gate.
  *
  * Browsers refuse to play audio or start speech synthesis until the user has
- * interacted with the page, so something has to be clicked before JARVIS can
+ * interacted with the page, so something has to be clicked before AURORA can
  * make a sound. Rather than hide that behind a permissions banner, it's the
  * cold open: a dead interface waiting to be switched on.
  *

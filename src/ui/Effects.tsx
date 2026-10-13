@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore, type UiEffect } from '../store'
 
 /**
- * One-shot frame effects, fired by JARVIS.
+ * One-shot frame effects, fired by AURORA.
  *
  * These are punctuation, not state: a shockwave when something lands, a tear
  * when something goes wrong. So the overlay only exists while an effect is

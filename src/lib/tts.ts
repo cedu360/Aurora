@@ -20,7 +20,7 @@ import { caps } from './capabilities'
  * conversation that gap is much more noticeable than the timbre.
  *
  * Either way, text is cut at sentence boundaries as it streams in and spoken a
- * sentence at a time, so JARVIS starts talking while Claude is still writing.
+ * sentence at a time, so AURORA starts talking while Claude is still writing.
  *
  * The queue is an explicit array with a single pump rather than a promise
  * chain. A chain cannot be cut: cancelling mid-sentence left the chain's tail
@@ -163,42 +163,39 @@ const MAX_UNSPOKEN = 220
 // Voice selection
 // ---------------------------------------------------------------------------
 
-const VOICE_PREF_KEY = 'jarvis.voice'
+const VOICE_PREF_KEY = 'aurora.voice'
 
 /**
- * Rank installed voices by how close they are to the character: a British
- * male, low and level, not a novelty voice.
+ * Ranks English voices for AURORA: a composed British woman first.
  *
- * The big win on macOS is the Enhanced/Premium variant of Daniel. The stock
- * "Daniel" is a compact voice from a decade ago and sounds it; the Enhanced
- * download is free (System Settings → Accessibility → Spoken Content → System
- * Voice → Manage Voices) and once installed it appears here automatically.
+ * Edge lists Microsoft's online "Natural" voices, of which Sonia is the
+ * closest to the character; Chrome has its own network voice, "Google UK
+ * English Female"; Windows ships Hazel offline; macOS has Serena, Kate and
+ * Martha. Male voices still work through the fallback, never picked first.
  */
 function scoreEn(v: SpeechSynthesisVoice): number {
   const n = v.name.toLowerCase()
   let s = 0
 
-  // The macOS British male, and the closest thing to the character available
-  // without leaving the machine.
-  if (n.startsWith('daniel')) s += 100
-  else if (n.includes('google uk english male')) s += 85
-  else if (/\b(oliver|arthur|jamie|malcolm)\b/.test(n)) s += 80
-  // Newer macOS en-GB male voices — casual, but serviceable.
-  else if (/\b(reed|rocko|eddy)\b/.test(n)) s += 40
+  if (/\bsonia\b/.test(n)) s += 100
+  else if (n.includes('google uk english female')) s += 90
+  else if (/\b(serena|libby|maisie|hollie|bella|abbi|olivia|martha)\b/.test(n)) s += 85
+  else if (/\b(kate|hazel|fiona|moira|stephanie)\b/.test(n)) s += 80
+  else if (/\b(susan|tessa|karen|samantha|allison|ava|zoe)\b/.test(n)) s += 60
 
   // Higher-quality variants of whatever matched above.
-  if (n.includes('premium')) s += 30
+  if (n.includes('natural') || n.includes('neural') || n.includes('premium')) s += 30
   else if (n.includes('enhanced')) s += 20
 
   if (/en[-_]gb/i.test(v.lang)) s += 25
   else if (/^en/i.test(v.lang)) s += 5
 
-  // Voices that clearly aren't a butler.
+  // Voices that are clearly not an assistant.
   if (/grandma|grandpa|bubbles|jester|bells|boing|whisper|zarvox|superstar|trinoids|wobble|bahh|organ|cellos|bad news|good news/.test(n)) {
     s -= 200
   }
-  // Female-presenting names across the English sets.
-  if (/\b(flo|sandy|shelley|kate|serena|fiona|moira|karen|tessa|samantha|zoe|allison|ava|susan)\b/.test(n)) {
+  // Male-presenting names across the English sets.
+  if (/\b(daniel|oliver|arthur|george|ryan|thomas|alfie|elliot|ethan|noah|jamie|malcolm|reed|rocko|eddy|fred|alex)\b/.test(n) || n.includes('english male')) {
     s -= 60
   }
 
@@ -206,26 +203,25 @@ function scoreEn(v: SpeechSynthesisVoice): number {
 }
 
 /**
- * The same ranking for Brazilian Portuguese: a calm male voice, Brazilian
+ * The same ranking for Brazilian Portuguese: a calm woman's voice, Brazilian
  * before European.
  *
  * On Windows the names are what Chrome and Edge list. Edge adds the online
- * "Natural" voices, of which Antonio is by far the best male; Chrome sees only
- * the voices installed in Windows, where Daniel is the male one (Settings →
- * Time & Language → Speech → Add voices, if it is missing). Felipe is the
- * macOS male. Google's network voice in Chrome is female, so it ranks below
- * the male voices but stays usable, because on many machines it is the only
- * Brazilian voice there is.
+ * "Natural" voices, of which Francisca and Thalita are the Brazilian women;
+ * Chrome sees only the voices installed in Windows, where Maria is the one
+ * (Settings → Time & Language → Speech → Add voices, if it is missing), plus
+ * Google's own network voice, which is female too. Luciana is the macOS one.
  */
 function scorePt(v: SpeechSynthesisVoice): number {
   const n = v.name.toLowerCase()
   let s = 0
 
-  if (/\bantonio\b/.test(n)) s += 100
-  else if (/\bdaniel\b/.test(n)) s += 90
-  else if (/\bfelipe\b/.test(n)) s += 85
-  else if (/\b(donato|fabio|fábio|humberto|julio|júlio|nicolau|valerio|valério)\b/.test(n)) s += 80
-  else if (n.includes('google português do brasil') || n.includes('google portugues do brasil')) s += 45
+  if (/\bfrancisca\b/.test(n)) s += 100
+  else if (/\bthalita\b/.test(n)) s += 95
+  else if (/\bmaria\b/.test(n)) s += 90
+  else if (/\bluciana\b/.test(n)) s += 85
+  else if (/\b(brenda|giovanna|elza|manuela|yara|leila|leticia|letícia|raquel|camila|vitória|vitoria|fernanda|helena|joana|catarina)\b/.test(n)) s += 80
+  else if (n.includes('google português do brasil') || n.includes('google portugues do brasil')) s += 75
 
   if (n.includes('natural') || n.includes('neural')) s += 30
   else if (n.includes('premium')) s += 30
@@ -234,9 +230,9 @@ function scorePt(v: SpeechSynthesisVoice): number {
   if (/pt[-_]br/i.test(v.lang)) s += 25
   else if (/^pt/i.test(v.lang)) s += 5
 
-  // Female-presenting names in the Portuguese sets. Still reachable through
-  // the fallback when nothing else is installed, just never picked first.
-  if (/\b(maria|francisca|thalita|luciana|joana|catarina|fernanda|helena|leila|brenda|giovanna|elza|manuela|yara|leticia|letícia|raquel|camila|vitória|vitoria)\b/.test(n)) {
+  // Male-presenting names in the Portuguese sets. Still reachable through the
+  // fallback when nothing else is installed, just never picked first.
+  if (/\b(antonio|antónio|daniel|felipe|donato|fabio|fábio|humberto|julio|júlio|nicolau|valerio|valério|duarte|cristiano)\b/.test(n)) {
     s -= 60
   }
 
@@ -353,7 +349,7 @@ function outputContext(): AudioContext | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Nudge the delivery toward JARVIS's cadence.
+ * Nudge the delivery toward AURORA's cadence.
  *
  * speechSynthesis ignores SSML, so punctuation is the only prosody control
  * available — the engine pauses on commas and full stops. Making sure the
@@ -500,7 +496,7 @@ export function createSpeaker(): Speaker {
         nativeBroken = true
         diag.nativeBroken = true
         diag.engine = 'elevenlabs'
-        console.warn('[jarvis] system voice is not producing sound — using the bridge speech proxy from here on')
+        console.warn('[aurora] system voice is not producing sound — using the bridge speech proxy from here on')
       }
       const rescue = await fetchCloudAudio(item.text).catch(() => null)
       if (rescue && !cancelled) {
@@ -599,7 +595,7 @@ export function createSpeaker(): Speaker {
         // barge-in. Everything else means the engine could not speak.
         if (code !== 'interrupted' && code !== 'canceled') {
           diag.failures++
-          console.error(`[jarvis] speech failed (${code}) on voice "${u.voice?.name ?? 'default'}"`)
+          console.error(`[aurora] speech failed (${code}) on voice "${u.voice?.name ?? 'default'}"`)
         }
         finish()
       }
@@ -610,7 +606,7 @@ export function createSpeaker(): Speaker {
       // silent sentence is recoverable and a stuck queue is not.
       watchdog = setTimeout(() => {
         if (done || started) return
-        console.warn('[jarvis] speech did not start — un-wedging the engine')
+        console.warn('[aurora] speech did not start — un-wedging the engine')
         speechSynthesis.cancel()
         speechSynthesis.resume()
         try {
@@ -621,7 +617,7 @@ export function createSpeaker(): Speaker {
         }
         watchdog = setTimeout(() => {
           if (done || started) return
-          console.error('[jarvis] speech engine is not responding — switching to the cloud voice')
+          console.error('[aurora] speech engine is not responding — switching to the cloud voice')
           diag.failures++
           diag.lastError = diag.lastError || 'no-start'
           finish()

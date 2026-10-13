@@ -10,7 +10,7 @@ import { isAbsolute, join, relative } from 'node:path'
  *
  * Cápsula keeps its state in ~/.capsula as plain JSON: a hash-chained ledger
  * of blocks, the node's configuration, its peers and an index of sealed cases.
- * This server lets JARVIS answer questions about it — is the node configured,
+ * This server lets AURORA answer questions about it — is the node configured,
  * how long is the chain, what happened in the last blocks, does the chain
  * still verify — without being able to change any of it.
  *
@@ -354,7 +354,7 @@ export function capsulaServer(root = capsulaDir()) {
   }
 
   return createSdkMcpServer({
-    name: 'jarvis_capsula',
+    name: 'aurora_capsula',
     version: '1.0.0',
     instructions:
       "The user's own Cápsula node, read-only: its configuration, ledger, " +

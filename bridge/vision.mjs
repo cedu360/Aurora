@@ -2,7 +2,7 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 
 /**
- * JARVIS's eyes.
+ * AURORA's eyes.
  *
  * Everything else in this bridge pushes: a panel appears, a blade opens, the
  * interface retints. This is the one capability that has to ask and wait — the
@@ -72,7 +72,7 @@ than listing them. The user knows what their own hands look like.`
  */
 export function visionServer(ask) {
   return createSdkMcpServer({
-    name: 'jarvis_eyes',
+    name: 'aurora_eyes',
     version: '1.0.0',
     instructions:
       "The camera on the user's machine, pointed at them. Use it when they ask " +

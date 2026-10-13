@@ -1,7 +1,7 @@
 /**
  * The arc reactor as a Windows icon, drawn here rather than shipped.
  *
- * The shortcuts that start JARVIS want an .ico, and a binary in the repository
+ * The shortcuts that start AURORA want an .ico, and a binary in the repository
  * is a thing nobody can review or change. So the same reactor as
  * public/favicon.svg is painted pixel by pixel and packed as PNG frames inside
  * an ICO, with nothing but node:zlib. Four sizes, so Windows never has to

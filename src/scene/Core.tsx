@@ -6,7 +6,7 @@ import type { Drive } from './Scene'
 /**
  * The reactor.
  *
- * Modelled on the JARVIS: A Second Screen Experience interface rather than on
+ * Modelled on the AURORA: A Second Screen Experience interface rather than on
  * the suit HUD, because that is the thing this app actually is — an assistant
  * you talk to, sitting idle and listening, not a targeting display. That
  * interface is one big COMPLETE ring: a soft teal torus with a dusty, eroded

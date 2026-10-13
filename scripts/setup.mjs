@@ -1,19 +1,19 @@
 #!/usr/bin/env node
-// JARVIS preflight — a friendly, advisory check you run with `npm run setup`.
+// AURORA preflight — a friendly, advisory check you run with `npm run setup`.
 //
 // It changes nothing and installs nothing. It looks at your machine, tells you
 // what is ready and what is missing, and prints the command that starts
-// JARVIS. Every check degrades to a single friendly line if something is not
+// AURORA. Every check degrades to a single friendly line if something is not
 // there, and the script always exits 0 — it is advice, not a gate.
 //
-// Portuguese unless JARVIS_LANG says otherwise, like the bridge.
+// Portuguese unless AURORA_LANG says otherwise, like the bridge.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 
-const PT = (process.env.JARVIS_LANG ?? 'pt-BR').startsWith('pt');
+const PT = (process.env.AURORA_LANG ?? 'pt-BR').startsWith('pt');
 const say = (pt, en) => (PT ? pt : en);
 const WINDOWS = platform() === 'win32';
 
@@ -26,7 +26,7 @@ function line(tag, msg) {
 }
 
 console.log('');
-console.log(say('JARVIS — conferindo o computador (nada é alterado)', 'JARVIS preflight — checking your machine (nothing is changed)'));
+console.log(say('AURORA — conferindo o computador (nada é alterado)', 'AURORA preflight — checking your machine (nothing is changed)'));
 console.log('------------------------------------------------------------');
 
 // --- Node version --------------------------------------------------------
@@ -38,7 +38,7 @@ try {
     line(warn, say(`O Node.js ${process.versions.node} é anterior ao 20. Atualize: a ponte precisa do 20 ou mais novo.`, `Node.js ${process.versions.node} is below 20. Please upgrade — the bridge needs Node 20 or newer.`));
   }
 } catch {
-  line(warn, say('Não consegui ler a versão do Node.js. O JARVIS precisa do 20 ou mais novo.', 'Could not read the Node.js version. JARVIS needs Node 20 or newer.'));
+  line(warn, say('Não consegui ler a versão do Node.js. A AURORA precisa do 20 ou mais novo.', 'Could not read the Node.js version. AURORA needs Node 20 or newer.'));
 }
 
 // --- Claude CLI on PATH ---------------------------------------------------
@@ -70,7 +70,7 @@ try {
   if (n > 0) {
     line(tick, say(`~/.claude.json com ${n} servidor(es) MCP configurado(s).`, `~/.claude.json found with ${n} MCP server${n === 1 ? '' : 's'} configured.`));
   } else {
-    line(info, say('~/.claude.json existe, mas sem servidores MCP. O JARVIS responde e controla a própria interface mesmo assim.', '~/.claude.json found, but no MCP servers are configured yet. JARVIS still answers and drives its own interface.'));
+    line(info, say('~/.claude.json existe, mas sem servidores MCP. A AURORA responde e controla a própria interface mesmo assim.', '~/.claude.json found, but no MCP servers are configured yet. AURORA still answers and drives its own interface.'));
   }
 } catch {
   line(info, say('~/.claude.json ainda não existe. Ele aparece depois do primeiro `claude` com login.', '~/.claude.json not found yet. It appears once you run `claude` and log in.'));
@@ -88,14 +88,14 @@ try {
   const { memoryPlaces } = await import('../bridge/memory.mjs');
   const places = memoryPlaces();
   if (!places) {
-    line(info, say('Memória desligada (JARVIS_MEMORY=off).', 'Memory is off (JARVIS_MEMORY=off).'));
+    line(info, say('Memória desligada (AURORA_MEMORY=off).', 'Memory is off (AURORA_MEMORY=off).'));
   } else {
     line(tick, say(`Memória em ${places.dir}`, `Memory in ${places.dir}`));
     line(
       places.backup ? tick : info,
       places.backup
         ? say(`Cópia automática em ${places.backup}`, `Mirrored to ${places.backup}`)
-        : say('Sem cópia em outro disco (defina JARVIS_MEMORY_BACKUP para ter uma).', 'No mirror on another disk (set JARVIS_MEMORY_BACKUP for one).'),
+        : say('Sem cópia em outro disco (defina AURORA_MEMORY_BACKUP para ter uma).', 'No mirror on another disk (set AURORA_MEMORY_BACKUP for one).'),
     );
   }
 } catch {
@@ -107,7 +107,7 @@ const capsula = process.env.CAPSULA_DIR || join(homedir(), '.capsula');
 line(
   existsSync(capsula) ? tick : info,
   existsSync(capsula)
-    ? say(`Cápsula encontrado em ${capsula} (o JARVIS só lê; nunca a carteira nem as chaves).`, `Cápsula found at ${capsula} (read-only; never the wallet or keys).`)
+    ? say(`Cápsula encontrado em ${capsula} (a AURORA só lê; nunca a carteira nem as chaves).`, `Cápsula found at ${capsula} (read-only; never the wallet or keys).`)
     : say(`Cápsula não encontrado em ${capsula}. Defina CAPSULA_DIR se estiver em outro lugar.`, `No Cápsula at ${capsula}. Set CAPSULA_DIR if it lives elsewhere.`),
 );
 
@@ -117,7 +117,7 @@ try {
   if (await chromeAvailable()) {
     line(tick, say('Extensão Claude do Chrome acessível.', 'Claude Chrome extension reachable.'));
   } else {
-    line(info, say('Extensão Claude do Chrome não encontrada agora. Abra o Chrome com a extensão ativa para o JARVIS usar o seu navegador.', 'Claude Chrome extension not reachable right now. Open Chrome with it enabled so JARVIS can use your browser.'));
+    line(info, say('Extensão Claude do Chrome não encontrada agora. Abra o Chrome com a extensão ativa para a AURORA usar o seu navegador.', 'Claude Chrome extension not reachable right now. Open Chrome with it enabled so AURORA can use your browser.'));
   }
 } catch {
   // Not installed yet; the line above about npm install covers it.
@@ -139,12 +139,12 @@ const elSource = findElevenLabsKey();
 if (elSource) {
   line(tick, say(`Voz premium disponível — chave da ElevenLabs encontrada em ${elSource}.`, `Premium voice available — ElevenLabs key found via ${elSource}.`));
 } else {
-  line(info, say('Sem chave da ElevenLabs — o JARVIS usa a voz do navegador (funciona bem).', 'No ElevenLabs key found — JARVIS will use browser speech (that is completely fine).'));
+  line(info, say('Sem chave da ElevenLabs — a AURORA usa a voz do navegador (funciona bem).', 'No ElevenLabs key found — AURORA will use browser speech (that is completely fine).'));
 }
 
 // --- Start with Windows ---------------------------------------------------
 if (WINDOWS) {
-  const link = join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Jarvis.lnk');
+  const link = join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Aurora.lnk');
   line(
     existsSync(link) ? tick : info,
     existsSync(link)
@@ -155,12 +155,12 @@ if (WINDOWS) {
 
 // --- How to run ----------------------------------------------------------
 console.log('');
-console.log(say('Para rodar o JARVIS:', 'To run JARVIS:'));
+console.log(say('Para rodar a AURORA:', 'To run AURORA:'));
 console.log(say('  npm start                 # ponte e interface juntas', '  npm start                 # the brain and the face together'));
 console.log(say('  npm start -- --writes     # permitindo ações (arquivos, celular, cliques no navegador)', '  npm start -- --writes     # allowing actions (files, phone, browser clicks)'));
 console.log(say('  npm run janela            # tudo junto, numa janela própria que liga sozinha', '  npm run janela            # everything, in a window of its own that powers itself on'));
 console.log('');
-console.log(say('Depois abra http://localhost:5173 no Chrome, clique em INICIALIZAR e diga "Ei Jarvis".', 'Then open http://localhost:5173 in Chrome, click INITIALISE and say "Hey Jarvis".'));
+console.log(say('Depois abra http://localhost:5173 no Chrome, clique em INICIALIZAR e diga "Ei Aurora".', 'Then open http://localhost:5173 in Chrome, click INITIALISE and say "Hey Aurora".'));
 console.log('');
 
 process.exit(0);

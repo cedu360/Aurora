@@ -7,7 +7,7 @@ import { isPt, t } from '../lib/lang'
  * Rotating example commands, shown only while idle.
  *
  * A voice interface has no menus — nothing tells you what it can do. This is
- * the affordance. It disappears the moment JARVIS is doing anything, so it
+ * the affordance. It disappears the moment AURORA is doing anything, so it
  * never competes with the answer.
  *
  * Each line is phrased the way you'd actually say it, not as a feature name.
@@ -68,7 +68,7 @@ export function Suggestions() {
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.35 }}
         >
-          “{t('ei jarvis', 'hey jarvis')}, {EXAMPLES[i]}”
+          “{t('ei aurora', 'hey aurora')}, {EXAMPLES[i]}”
         </motion.span>
       </AnimatePresence>
     </div>

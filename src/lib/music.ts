@@ -2,7 +2,7 @@
  * Score.
  *
  * Three cues, all local files under public/audio/:
- *   boot-music — the JARVIS start-up sound, once, as the reactor comes up
+ *   boot-music — the AURORA start-up sound, once, as the reactor comes up
  *   ambient    — the opening music, once, alongside it
  *   work       — an industrial cue that loops while a tool is running
  *
@@ -36,7 +36,7 @@ const missing = new Set<Cue>()
  * whenever it is asked for a level above zero and finds the element paused —
  * which is the right rule for a bed that should be running, and completely
  * wrong for a track that has ENDED, because an ended element is also a paused
- * one. Ducking asks for ambient's level every time JARVIS stops speaking, so
+ * one. Ducking asks for ambient's level every time AURORA stops speaking, so
  * the opening music was being resurrected from the top after every single
  * sentence. It never looped; it was raised from the dead once a turn.
  */
@@ -45,9 +45,9 @@ const ALL: Cue[] = ['boot-music', 'ambient', 'work']
 let enabled = false
 
 /** Resting levels. Music sits well under the voice — it is atmosphere, not a
- *  soundtrack, and JARVIS has to stay intelligible over it. */
+ *  soundtrack, and AURORA has to stay intelligible over it. */
 const LEVEL: Record<Cue, number> = {
-  // The boot cue is the JARVIS start-up sound itself, not background swell, so
+  // The boot cue is the AURORA start-up sound itself, not background swell, so
   // it sits forward — it is meant to be heard as the reactor comes up, the way
   // the film plays it. The ambient bed underneath stays a whisper.
   'boot-music': 0.85,
@@ -69,7 +69,7 @@ const LEVEL: Record<Cue, number> = {
 
 /**
  * Where each cue currently wants to sit, before ducking. Kept separately from
- * the element volume so the two systems compose: a tool starting while JARVIS
+ * the element volume so the two systems compose: a tool starting while AURORA
  * is speaking brings the work cue in at its ducked level rather than at full,
  * and it rises the rest of the way when he stops.
  */
@@ -236,7 +236,7 @@ export function working(on: boolean) {
   set('work', on ? LEVEL.work : 0, on ? 900 : 1400)
 }
 
-/** Pull the bed down while JARVIS speaks so the voice stays clear. */
+/** Pull the bed down while AURORA speaks so the voice stays clear. */
 export function duck(on: boolean) {
   if (ducked === on) return
   ducked = on
