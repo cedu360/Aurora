@@ -14,6 +14,9 @@ import { spawn } from 'node:child_process'
 import process from 'node:process'
 import { cpSync, existsSync, mkdirSync } from 'node:fs'
 
+const PT = (process.env.JARVIS_LANG ?? 'pt-BR').startsWith('pt')
+const say = (pt, en) => (PT ? pt : en)
+
 /**
  * Put MediaPipe's WebAssembly where the page can actually load it.
  *
@@ -38,9 +41,9 @@ function vendorWasm() {
   try {
     mkdirSync(to, { recursive: true })
     cpSync(from, to, { recursive: true })
-    console.log('  vendored the hand-tracking runtime into public/mediapipe.')
+    console.log(say('  runtime do rastreamento de mãos copiado para public/mediapipe.', '  vendored the hand-tracking runtime into public/mediapipe.'))
   } catch (err) {
-    console.warn(`  could not vendor the hand-tracking runtime: ${err.message}`)
+    console.warn(say(`  não consegui copiar o runtime do rastreamento de mãos: ${err.message}`, `  could not vendor the hand-tracking runtime: ${err.message}`))
   }
 }
 
@@ -68,7 +71,7 @@ function run(name, command, args, colour, env) {
   child.on('exit', (code) => {
     // If either half dies the other is useless, so take the whole thing down
     // rather than leave a half-running app that looks alive but cannot answer.
-    console.log(`\x1b[${colour}m${name}\x1b[0m exited (${code}); stopping the rest.`)
+    console.log(`\x1b[${colour}m${name}\x1b[0m ${say(`saiu (${code}); parando o resto.`, `exited (${code}); stopping the rest.`)}`)
     shutdown(code ?? 0)
   })
   children.push(child)
@@ -108,18 +111,24 @@ const port = process.env.PORT
 const bridgeEnv = writes ? { JARVIS_ALLOW_WRITES: '1' } : {}
 if (port) {
   bridgeEnv.JARVIS_ALLOWED_ORIGINS = `http://localhost:${port},http://127.0.0.1:${port}`
-  console.log(`  serving the face on port ${port}; the bridge will accept it.\n`)
+  console.log(say(`  interface na porta ${port}; a ponte vai aceitá-la.\n`, `  serving the face on port ${port}; the bridge will accept it.\n`))
 }
 
 vendorWasm()
 
-console.log('\nJ.A.R.V.I.S. starting — the brain and the face.\n')
-run('bridge', 'node', ['bridge/server.mjs'], '36', bridgeEnv)
+console.log(say('\nJ.A.R.V.I.S. iniciando — o cérebro e a interface.\n', '\nJ.A.R.V.I.S. starting — the brain and the face.\n'))
+// process.execPath rather than 'node': the same Node that is running this
+// script, wherever it lives, with no PATH lookup to go wrong on Windows.
+run('bridge', process.execPath, ['bridge/server.mjs', ...(writes ? ['--writes'] : [])], '36', bridgeEnv)
 // npm is a shell script on most systems; call the vite binary directly so we do
 // not need shell:true (which would break the argument handling above).
 run('face', process.execPath, ['node_modules/vite/bin/vite.js'], '35', {})
 
 console.log(
-  '\nWhen it says the dev server is ready, open the URL it prints in Chrome,\n' +
-    'click INITIALISE, and say "Hey Jarvis". Ctrl-C stops everything.\n',
+  say(
+    '\nQuando aparecer que o servidor está pronto, abra no Chrome o endereço que ele mostrar,\n' +
+      'clique em INICIALIZAR e diga "Ei Jarvis". Ctrl-C para tudo.\n',
+    '\nWhen it says the dev server is ready, open the URL it prints in Chrome,\n' +
+      'click INITIALISE, and say "Hey Jarvis". Ctrl-C stops everything.\n',
+  ),
 )

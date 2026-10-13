@@ -6,17 +6,29 @@ import { BladeSweep, Blades } from './Blades'
 import { Effects } from './Effects'
 import { Pointer } from './Pointer'
 import { GestureGuide } from './GestureGuide'
+import { isPt, t as tr } from '../lib/lang'
 
-const statusText: Record<Phase, string> = {
-  offline: 'OFFLINE',
-  boot: 'INITIALISING',
-  dormant: 'STANDBY — SAY “HEY JARVIS”',
-  waking: 'ONLINE',
-  listening: 'LISTENING',
-  thinking: 'PROCESSING',
-  tooling: 'ACCESSING SYSTEMS',
-  speaking: 'RESPONDING',
-}
+const statusText: Record<Phase, string> = isPt
+  ? {
+      offline: 'DESLIGADO',
+      boot: 'INICIALIZANDO',
+      dormant: 'EM ESPERA — DIGA “EI JARVIS”',
+      waking: 'ONLINE',
+      listening: 'OUVINDO',
+      thinking: 'PROCESSANDO',
+      tooling: 'ACESSANDO SISTEMAS',
+      speaking: 'RESPONDENDO',
+    }
+  : {
+      offline: 'OFFLINE',
+      boot: 'INITIALISING',
+      dormant: 'STANDBY — SAY “HEY JARVIS”',
+      waking: 'ONLINE',
+      listening: 'LISTENING',
+      thinking: 'PROCESSING',
+      tooling: 'ACCESSING SYSTEMS',
+      speaking: 'RESPONDING',
+    }
 
 function Corner({ at }: { at: 'tl' | 'tr' | 'bl' | 'br' }) {
   return <div className={`corner corner-${at}`} />
@@ -210,8 +222,8 @@ export function Hud() {
       {/* Left rail: which integrations are live */}
       {ui.chrome.systems && (
         <aside className="rail rail-left">
-          <div className="rail-title">SYSTEMS</div>
-          {connected.length === 0 && <div className="rail-item dim">none linked</div>}
+          <div className="rail-title">{tr('SISTEMAS', 'SYSTEMS')}</div>
+          {connected.length === 0 && <div className="rail-item dim">{tr('nenhum conectado', 'none linked')}</div>}
           {connected.map((c) => (
             <div key={c} className="rail-item">
               <span className="tick" />
@@ -227,7 +239,7 @@ export function Hud() {
 
       {/* Right rail: live telemetry, mostly for flavour */}
       <aside className="rail rail-right">
-        <div className="rail-title">SIGNAL</div>
+        <div className="rail-title">{tr('SINAL', 'SIGNAL')}</div>
         <div className="meter">
           <div className="meter-fill" style={{ height: `${level * 100}%` }} />
         </div>
@@ -253,7 +265,7 @@ export function Hud() {
           >
             <span className="tool-kicker">
               <span className="spinner" />
-              accessing
+              {tr('acessando', 'accessing')}
             </span>
             <span className="tool-name">{activeTool.replace(/[_-]/g, ' ')}</span>
           </motion.div>
@@ -273,7 +285,7 @@ export function Hud() {
                 exit={{ opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 320, damping: 32 }}
               >
-                <span className="log-who">{t.role === 'user' ? 'YOU' : 'JARVIS'}</span>
+                <span className="log-who">{t.role === 'user' ? tr('VOCÊ', 'YOU') : 'JARVIS'}</span>
                 {/* Only his half decodes. What the user said was never
                     transmitted from anywhere — dressing it up as machine
                     output would be a lie about where the words came from. */}
@@ -312,11 +324,12 @@ export function Hud() {
 
       <footer className="hud-bottom">
         <span className="hint">
-          say <b>“hey jarvis”</b> · <kbd>Space</kbd> to talk · <kbd>G</kbd> hands
+          {tr('diga', 'say')} <b>{tr('“ei jarvis”', '“hey jarvis”')}</b> · <kbd>{tr('Espaço', 'Space')}</kbd>{' '}
+          {tr('para falar', 'to talk')} · <kbd>G</kbd> {tr('mãos', 'hands')}
           {voice && (
             <>
               {' · '}
-              <kbd>V</kbd> voice: {voice.replace(/\(.*?\)/g, '').trim()}
+              <kbd>V</kbd> {tr('voz', 'voice')}: {voice.replace(/\(.*?\)/g, '').trim()}
             </>
           )}
         </span>

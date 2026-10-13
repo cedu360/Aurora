@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { diag } from '../lib/hands'
+import { isPt, t } from '../lib/lang'
 
 /**
  * What your hands can do.
@@ -16,13 +17,21 @@ import { diag } from '../lib/hands'
  * because that is when you have forgotten.
  */
 
-const MOVES: { gesture: string; hand: string; does: string }[] = [
-  { gesture: 'point', hand: '☝', does: 'move the cursor' },
-  { gesture: 'pinch', hand: '🤏', does: 'grab a blade · move it · press' },
-  { gesture: 'open', hand: '🖐', does: 'let go' },
-  { gesture: 'peace', hand: '✌', does: 'two fingers up-down to scroll' },
-  { gesture: 'frame', hand: '📐', does: 'two L-corners to resize' },
-]
+const MOVES: { gesture: string; hand: string; does: string }[] = isPt
+  ? [
+      { gesture: 'apontar', hand: '☝', does: 'move o cursor' },
+      { gesture: 'pinça', hand: '🤏', does: 'pega um painel · move · aperta' },
+      { gesture: 'mão aberta', hand: '🖐', does: 'solta' },
+      { gesture: 'paz', hand: '✌', does: 'dois dedos para cima e para baixo rolam' },
+      { gesture: 'moldura', hand: '📐', does: 'dois cantos em L redimensionam' },
+    ]
+  : [
+      { gesture: 'point', hand: '☝', does: 'move the cursor' },
+      { gesture: 'pinch', hand: '🤏', does: 'grab a blade · move it · press' },
+      { gesture: 'open', hand: '🖐', does: 'let go' },
+      { gesture: 'peace', hand: '✌', does: 'two fingers up-down to scroll' },
+      { gesture: 'frame', hand: '📐', does: 'two L-corners to resize' },
+    ]
 
 /** How long the legend stays after the first successful press. */
 const DISMISS_MS = 1400
@@ -63,7 +72,7 @@ export function GestureGuide({ live }: { live: boolean }) {
           exit={{ opacity: 0, y: 8, filter: 'blur(6px)', transition: { duration: 0.5 } }}
           transition={{ type: 'spring', stiffness: 260, damping: 28 }}
         >
-          <div className="gguide-head">HAND CONTROL</div>
+          <div className="gguide-head">{t('CONTROLE COM AS MÃOS', 'HAND CONTROL')}</div>
           {MOVES.map((m) => (
             <div key={m.gesture} className="gguide-row">
               <span className="gguide-icon">{m.hand}</span>
@@ -72,7 +81,8 @@ export function GestureGuide({ live }: { live: boolean }) {
             </div>
           ))}
           <div className="gguide-foot">
-            grab a blade by its bar · <kbd>G</kbd> to stop
+            {t('pegue um painel pela barra', 'grab a blade by its bar')} · <kbd>G</kbd>{' '}
+            {t('para parar', 'to stop')}
           </div>
         </motion.div>
       )}

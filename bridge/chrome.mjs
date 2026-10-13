@@ -2,7 +2,7 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import { createConnection } from 'node:net'
 import { readdir, stat } from 'node:fs/promises'
-import { userInfo } from 'node:os'
+import { platform, userInfo } from 'node:os'
 import { join } from 'node:path'
 
 /**
@@ -25,6 +25,7 @@ import { join } from 'node:path'
  *        ↕  Chrome Native Messaging: 4-byte little-endian length + JSON
  *   chrome-native-host
  *        ↕  Unix socket: /tmp/claude-mcp-browser-bridge-<user>/<pid>.sock
+ *           Windows:     \\.\pipe\claude-mcp-browser-bridge-<user>
  *   whoever connects  ← this file
  *
  * What Claude Code normally does at that last step is detour through
@@ -47,13 +48,34 @@ import { join } from 'node:path'
  */
 
 /**
- * Where the native host puts its socket.
+ * The user name the native host puts in its socket's name.
  *
  * `userInfo().username` rather than $USER, which is unset under launchd — and a
  * bridge started from a login item is exactly the case where a wrong guess
- * would look like the extension being uninstalled.
+ * would look like the extension being uninstalled. The fallbacks are the
+ * native host's own, so both ends agree even when the lookup fails.
  */
-const SOCKET_DIR = `/tmp/claude-mcp-browser-bridge-${userInfo().username}`
+function username() {
+  try {
+    return userInfo().username || 'default'
+  } catch {
+    return process.env.USER || process.env.USERNAME || 'default'
+  }
+}
+
+const BRIDGE_NAME = `claude-mcp-browser-bridge-${username()}`
+
+/** Where the native host puts its sockets on macOS and Linux. */
+const SOCKET_DIR = `/tmp/${BRIDGE_NAME}`
+
+/**
+ * On Windows there is no socket directory. The native host listens on one
+ * named pipe per user, with no pid in the name, so there is nothing to choose
+ * between — only whether it is there.
+ */
+const WINDOWS = platform() === 'win32'
+const PIPE_DIR = '\\\\.\\pipe\\'
+const PIPE_PATH = `${PIPE_DIR}${BRIDGE_NAME}`
 
 /**
  * How long a single browser action may take.
@@ -82,6 +104,29 @@ const CONNECT_TIMEOUT_MS = 3_000
  * accepted as a last resort, because on some setups it is all there is.
  */
 async function findSocket() {
+  return WINDOWS ? findPipe() : findUnixSocket()
+}
+
+/**
+ * The pipe, if Chrome's native host is serving it.
+ *
+ * Node can list `\\.\pipe\` like a directory, which answers the question
+ * without connecting. Pipe names are case-insensitive, hence the comparison.
+ * Where the listing is refused, the pipe is returned anyway and the dial
+ * decides, which costs one failed connect rather than a wrong "unavailable".
+ */
+async function findPipe() {
+  let names
+  try {
+    names = await readdir(PIPE_DIR)
+  } catch {
+    return PIPE_PATH
+  }
+  const wanted = BRIDGE_NAME.toLowerCase()
+  return names.some((n) => n.toLowerCase() === wanted) ? PIPE_PATH : null
+}
+
+async function findUnixSocket() {
   let names
   try {
     names = await readdir(SOCKET_DIR)

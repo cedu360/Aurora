@@ -6,6 +6,7 @@ import {
   KOKORO_VOICE,
   BRIDGE_HTTP_URL,
 } from '../config'
+import { LANG, isPt } from './lang'
 import * as kokoro from './kokoro'
 import { caps } from './capabilities'
 
@@ -149,7 +150,7 @@ const SENTENCE_END = /([.!?]["'')\]”’]?\s)|(\n\n)/
 /** Full stops that are not sentence ends. Cutting on these puts an audible
  *  gap inside "Mr. Stark" and reads as a stutter. */
 const ABBREVIATION =
-  /(?:^|\s)(mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e|approx|inc|ltd|co|no|vol|fig|dept|est|min|max|hr|hrs|a\.m|p\.m|u\.s|u\.k|no)\.$/i
+  /(?:^|\s)(mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e|approx|inc|ltd|co|no|vol|fig|dept|est|min|max|hr|hrs|a\.m|p\.m|u\.s|u\.k|no|sra|srta|dra|profa|ltda|av|obs|aprox|tel|p[áa]g|cap|s[ée]c|n[º°o]|a\.c|d\.c|s\.a|v\.ex[ªa]?)\.$/i
 
 /**
  * Nobody punctuates forever, but a model occasionally writes a long clause
@@ -173,7 +174,7 @@ const VOICE_PREF_KEY = 'jarvis.voice'
  * download is free (System Settings → Accessibility → Spoken Content → System
  * Voice → Manage Voices) and once installed it appears here automatically.
  */
-function score(v: SpeechSynthesisVoice): number {
+function scoreEn(v: SpeechSynthesisVoice): number {
   const n = v.name.toLowerCase()
   let s = 0
 
@@ -204,6 +205,49 @@ function score(v: SpeechSynthesisVoice): number {
   return s
 }
 
+/**
+ * The same ranking for Brazilian Portuguese: a calm male voice, Brazilian
+ * before European.
+ *
+ * On Windows the names are what Chrome and Edge list. Edge adds the online
+ * "Natural" voices, of which Antonio is by far the best male; Chrome sees only
+ * the voices installed in Windows, where Daniel is the male one (Settings →
+ * Time & Language → Speech → Add voices, if it is missing). Felipe is the
+ * macOS male. Google's network voice in Chrome is female, so it ranks below
+ * the male voices but stays usable, because on many machines it is the only
+ * Brazilian voice there is.
+ */
+function scorePt(v: SpeechSynthesisVoice): number {
+  const n = v.name.toLowerCase()
+  let s = 0
+
+  if (/\bantonio\b/.test(n)) s += 100
+  else if (/\bdaniel\b/.test(n)) s += 90
+  else if (/\bfelipe\b/.test(n)) s += 85
+  else if (/\b(donato|fabio|fábio|humberto|julio|júlio|nicolau|valerio|valério)\b/.test(n)) s += 80
+  else if (n.includes('google português do brasil') || n.includes('google portugues do brasil')) s += 45
+
+  if (n.includes('natural') || n.includes('neural')) s += 30
+  else if (n.includes('premium')) s += 30
+  else if (n.includes('enhanced') || n.includes('melhorada')) s += 20
+
+  if (/pt[-_]br/i.test(v.lang)) s += 25
+  else if (/^pt/i.test(v.lang)) s += 5
+
+  // Female-presenting names in the Portuguese sets. Still reachable through
+  // the fallback when nothing else is installed, just never picked first.
+  if (/\b(maria|francisca|thalita|luciana|joana|catarina|fernanda|helena|leila|brenda|giovanna|elza|manuela|yara|leticia|letícia|raquel|camila|vitória|vitoria)\b/.test(n)) {
+    s -= 60
+  }
+
+  return s
+}
+
+const score = isPt ? scorePt : scoreEn
+
+/** "pt" or "en": which installed voices can say the words at all. */
+const LANG_PREFIX = new RegExp(`^${LANG.slice(0, 2)}`, 'i')
+
 /** Only voices that scored on a name match, not merely on being English —
  *  otherwise the picker cycles through a dozen US novelty voices. */
 const USABLE = 40
@@ -212,7 +256,7 @@ const USABLE = 40
 export function candidateVoices(): SpeechSynthesisVoice[] {
   return speechSynthesis
     .getVoices()
-    .filter((v) => /^en/i.test(v.lang))
+    .filter((v) => LANG_PREFIX.test(v.lang))
     .map((v) => ({ v, s: score(v) }))
     .filter((x) => x.s >= USABLE)
     .sort((a, b) => b.s - a.s)
@@ -231,12 +275,21 @@ function pickVoice(): SpeechSynthesisVoice | null {
   // if that voice is ever reinstalled.
   const saved = localStorage.getItem(VOICE_PREF_KEY)
   if (saved) {
-    const hit = all.find((v) => v.name === saved)
+    // Only while it speaks the active language: a voice picked before
+    // switching to Portuguese would otherwise read it with an English accent.
+    const hit = all.find((v) => v.name === saved && LANG_PREFIX.test(v.lang))
     if (hit) return (cachedVoice = hit)
     localStorage.removeItem(VOICE_PREF_KEY)
   }
 
-  cachedVoice = candidateVoices()[0] ?? all.find((v) => /^en/i.test(v.lang)) ?? null
+  // A saved English voice would read Portuguese with an English accent, so
+  // the fallback stays inside the language too: first the exact variant
+  // (pt-BR), then any of it (pt-PT), then nothing — the browser default.
+  cachedVoice =
+    candidateVoices()[0] ??
+    all.find((v) => v.lang.replace('_', '-').toLowerCase() === LANG.toLowerCase()) ??
+    all.find((v) => LANG_PREFIX.test(v.lang)) ??
+    null
   return cachedVoice
 }
 
@@ -323,7 +376,7 @@ function shape(text: string): string {
       // The vocative wants its comma — that small beat before "sir" does most
       // of the characterisation. Anchored to a following pause or end of line
       // so the honorific is left alone: "Sir Isaac Newton" is not a vocative.
-      .replace(/([^,\s])\s+(sir)(\s*[.,!?;:]|\s*$)/gi, '$1, $2$3')
+      .replace(/([^,\s])\s+(sir|senhor)(\s*[.,!?;:]|\s*$)/gi, '$1, $2$3')
       .replace(/\s+/g, ' ')
       .trim()
   )
@@ -477,7 +530,7 @@ export function createSpeaker(): Speaker {
       const u = new SpeechSynthesisUtterance(text)
       const voice = pickVoice()
       if (voice) u.voice = voice
-      u.lang = voice?.lang ?? 'en-GB'
+      u.lang = voice?.lang ?? LANG
       // Deliberate, and deliberately invariant — the character's pace does not
       // change with stakes, and that steadiness is most of the effect. This
       // lands around 130 wpm, below the median for film dialogue.

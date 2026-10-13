@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef } from 'react'
 import { AnimatePresence, motion, type Variants } from 'framer-motion'
 import { useStore, type Panel } from '../store'
 import { sanitisePanelHtml } from './sanitise'
+import { t } from '../lib/lang'
 
 /**
  * Heads-up display panels.
@@ -163,7 +164,7 @@ const Card = memo(function Card({ panel }: { panel: Panel }) {
       {/* Sanitised above; `stagger` is handled in CSS so it applies to whatever
           children the model happened to author. */}
       {empty ? (
-        <p className="p-empty">no content returned</p>
+        <p className="p-empty">{t('nenhum conteúdo retornado', 'no content returned')}</p>
       ) : (
         <div
           ref={body}

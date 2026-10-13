@@ -1,4 +1,5 @@
 import { useStore } from '../store'
+import { t } from '../lib/lang'
 
 /**
  * The start gate.
@@ -47,8 +48,8 @@ export function Ignition({ onStart }: { onStart: () => void }) {
       */}
       <span className="ignition-ring" />
       <span className="ignition-label">
-        <span className="ignition-word">INITIALISE</span>
-        <span className="ignition-sub">click, or clap, to power up</span>
+        <span className="ignition-word">{t('INICIALIZAR', 'INITIALISE')}</span>
+        <span className="ignition-sub">{t('clique, ou bata palmas, para ligar', 'click, or clap, to power up')}</span>
       </span>
     </button>
   )

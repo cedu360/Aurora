@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useStore } from '../store'
+import { isPt, t } from '../lib/lang'
 
 /**
  * Rotating example commands, shown only while idle.
@@ -11,7 +12,20 @@ import { useStore } from '../store'
  *
  * Each line is phrased the way you'd actually say it, not as a feature name.
  */
-const EXAMPLES = [
+const EXAMPLES_PT = [
+  'o que aconteceu com inteligência artificial esta semana',
+  'gere uma imagem da armadura Mark 7',
+  'o que tem na minha agenda amanhã',
+  'procure a melhor cafeteria perto de mim',
+  'leia para mim a principal notícia do dia',
+  'resuma o que chegou no meu e-mail',
+  'lembre que a reunião com o fornecedor é sexta às 10',
+  'o que você lembra sobre o Cápsula',
+  'analise este executável com o REA',
+  'como está o tempo hoje',
+]
+
+const EXAMPLES_EN = [
   'what happened in AI this week',
   'generate an image of the Mark Seven suit',
   'take a screenshot of my phone',
@@ -23,6 +37,8 @@ const EXAMPLES = [
   'find me a loading animation',
   "what's the weather looking like",
 ]
+
+const EXAMPLES = isPt ? EXAMPLES_PT : EXAMPLES_EN
 
 const ROTATE_MS = 4200
 
@@ -42,7 +58,7 @@ export function Suggestions() {
 
   return (
     <div className="suggest">
-      <span className="suggest-lead">try</span>
+      <span className="suggest-lead">{t('experimente', 'try')}</span>
       <AnimatePresence mode="wait">
         <motion.span
           key={i}
@@ -52,7 +68,7 @@ export function Suggestions() {
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.35 }}
         >
-          “hey jarvis, {EXAMPLES[i]}”
+          “{t('ei jarvis', 'hey jarvis')}, {EXAMPLES[i]}”
         </motion.span>
       </AnimatePresence>
     </div>

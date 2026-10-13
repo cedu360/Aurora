@@ -47,6 +47,22 @@ function flag(name: string, raw: unknown, fallback: boolean): boolean {
 }
 
 /**
+ * Speaking and listening language.
+ *
+ *   'pt-BR' (default) — Brazilian Portuguese: recogniser, voice, wake phrase
+ *     ("ei Jarvis" as well as "hey Jarvis"), stop words and on-screen text.
+ *   'en-GB' — the original British English JARVIS.
+ *
+ * The bridge has its own JARVIS_LANG for the persona; keep the two in step.
+ */
+export const LANG: 'pt-BR' | 'en-GB' = choice(
+  'VITE_LANG',
+  import.meta.env.VITE_LANG,
+  ['pt-BR', 'en-GB'] as const,
+  'pt-BR',
+)
+
+/**
  * Which brain to use.
  *
  *   'bridge' — run `npm run bridge` alongside the app. Authenticates off your
@@ -107,12 +123,22 @@ export const USE_ELEVENLABS = flag(
  *     quantisation often silently falls back to CPU on WebGPU, which is the
  *     likely cause.
  */
-export const TTS_ENGINE: 'kokoro' | 'system' = choice(
+const ENGINE_ASKED: 'kokoro' | 'system' = choice(
   'VITE_TTS_ENGINE',
   import.meta.env.VITE_TTS_ENGINE,
   ['kokoro', 'system'] as const,
   'system',
 )
+
+/**
+ * Kokoro's voices here are all British English, so in any other language it
+ * would read Portuguese with an English mouth. Fall back to the system voice.
+ */
+export const TTS_ENGINE: 'kokoro' | 'system' =
+  ENGINE_ASKED === 'kokoro' && LANG !== 'en-GB'
+    ? (console.warn('[jarvis] VITE_TTS_ENGINE=kokoro only speaks English — using the system voice.'),
+      'system')
+    : ENGINE_ASKED
 
 /**
  * Which Kokoro voice. All four are British male:
@@ -271,12 +297,7 @@ export const MCP_SERVERS: McpServer[] = [
 
 export const activeServers = () => MCP_SERVERS.filter((s) => s.enabled && s.url)
 
-/**
- * The persona for the browser-direct path only. The bridge carries its own,
- * fuller version in bridge/server.mjs — that's the one that gets used by
- * default, and the one worth editing.
- */
-export const SYSTEM_PROMPT = `You are JARVIS, Tony Stark's assistant. You are speaking out loud.
+const SYSTEM_PROMPT_EN = `You are JARVIS, Tony Stark's assistant. You are speaking out loud.
 
 THE HARD RULE: your entire reply must be under 60 words. This is not a style
 preference — every word is read aloud by a speech synthesiser and the user is
@@ -302,3 +323,38 @@ Using tools:
 - For anything outward-facing or destructive (sending mail, posting, paying,
   deleting) say exactly what you're about to do and wait for confirmation.
 - If you don't know, say you don't know.`
+
+const SYSTEM_PROMPT_PT = `Você é o JARVIS, o assistente de Tony Stark. Você está falando em voz alta,
+em português do Brasil.
+
+A REGRA FIRME: a resposta inteira tem menos de 60 palavras. Não é questão de
+estilo — cada palavra é lida por um sintetizador de voz e o usuário espera em
+silêncio enquanto ela toca. Se a pergunta realmente pede mais, dê o principal em
+duas frases e ofereça o resto: "Tem mais, se o senhor quiser."
+
+Voz:
+- Seco, preciso, discretamente bem-humorado. Competência sem alarde, nunca
+  bajulador.
+- Diga "senhor" no máximo uma vez por resposta, no fim da frase, e não em toda
+  resposta.
+- Só prosa falada. Sem markdown, sem listas, sem títulos, sem código, sem emoji,
+  sem asteriscos.
+- Escreva números, datas e horas como se fala: "oito e quinze", "primeiro de
+  agosto", "três vírgula cinco", não "8:15", "01/08" ou "3,5".
+
+Ferramentas:
+- Você tem ferramentas ao vivo. Use-as em vez de adivinhar.
+- Nunca anuncie que vai usar uma. Nada de "vou pesquisar isso" — fique em
+  silêncio, use, e depois responda.
+- Nunca leia em voz alta um link, um código ou JSON, a menos que peçam. Resuma.
+- Se uma ferramenta falhar ou não estiver conectada, diga isso em uma frase.
+- Para qualquer coisa que saia daqui ou apague algo (enviar e-mail, publicar,
+  pagar, apagar), diga exatamente o que vai fazer e espere a confirmação.
+- Se não souber, diga que não sabe.`
+
+/**
+ * The persona for the browser-direct path only. The bridge carries its own,
+ * fuller version in bridge/server.mjs — that's the one that gets used by
+ * default, and the one worth editing.
+ */
+export const SYSTEM_PROMPT = LANG.startsWith('pt') ? SYSTEM_PROMPT_PT : SYSTEM_PROMPT_EN

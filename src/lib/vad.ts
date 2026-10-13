@@ -1,4 +1,5 @@
 import { getMic } from './audio'
+import { t } from './lang'
 
 /**
  * Voice-activity detection and segment capture.
@@ -106,14 +107,14 @@ export async function startVad(h: VadHandlers): Promise<Vad> {
   } catch (err) {
     h.onError(
       err instanceof DOMException && err.name === 'NotAllowedError'
-        ? 'Microphone access denied — voice input is unavailable.'
-        : 'No microphone available.',
+        ? t('Acesso ao microfone negado — a entrada de voz não está disponível.', 'Microphone access denied — voice input is unavailable.')
+        : t('Nenhum microfone disponível.', 'No microphone available.'),
     )
     return { stop: () => {}, setGuard: () => {}, live: () => false, meter: () => ({ energy: 0, floor: 0, threshold: 0, speaking: false }) }
   }
 
   if (typeof MediaRecorder === 'undefined') {
-    h.onError('This browser cannot record audio — voice input is unavailable.')
+    h.onError(t('Este navegador não grava áudio — a entrada de voz não está disponível.', 'This browser cannot record audio — voice input is unavailable.'))
     return { stop: () => {}, setGuard: () => {}, live: () => false, meter: () => ({ energy: 0, floor: 0, threshold: 0, speaking: false }) }
   }
 

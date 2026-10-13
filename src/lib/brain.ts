@@ -125,6 +125,12 @@ export function watchConnection(
   if (usingBridge) bridge.watchConnection(fn)
 }
 
+/** Whether the bridge keeps notes and recent exchanges on disk, so a dropped
+ *  connection costs the session but not the memory. Never on the direct path. */
+export function bridgeRemembers(): boolean {
+  return usingBridge && bridge.bridgeRemembers()
+}
+
 /** Labels for the HUD's SYSTEMS rail. */
 export function connectedLabels(): string[] {
   return usingBridge ? bridge.bridgeServers() : direct.connectedLabels()

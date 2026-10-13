@@ -21,12 +21,43 @@ import { displayServer } from './panels.mjs'
 import { uiServer } from './ui.mjs'
 import { chromeAvailable, chromeServer } from './chrome.mjs'
 import { visionServer } from './vision.mjs'
-import { homedir, tmpdir } from 'node:os'
-import { readFileSync, realpathSync } from 'node:fs'
+import { createMemory, memoryPlaces } from './memory.mjs'
+import { capsulaDir, capsulaServer } from './capsula.mjs'
+import { homedir, platform, tmpdir } from 'node:os'
+import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
+
+/**
+ * Settings from .env.local, for the bridge as well as the page.
+ *
+ * Vite already reads that file for the browser's VITE_* settings, and asking
+ * a Windows user to also export JARVIS_* variables in a shell — `set` in cmd,
+ * `$env:` in PowerShell, neither of which outlives the window — is how
+ * settings get lost. So the bridge reads the same file. Only its own keys are
+ * taken, and never one the environment already has: the file cannot change
+ * which account Claude Code bills, or override a deliberate export.
+ */
+function loadLocalEnv() {
+  // .env.local first, so it wins over .env: nothing set is ever overwritten.
+  for (const name of ['.env.local', '.env']) {
+    let text
+    try {
+      text = readFileSync(new URL(`../${name}`, import.meta.url), 'utf8')
+    } catch {
+      continue
+    }
+    for (const line of text.split(/\r?\n/)) {
+      const m = /^\s*(?:export\s+)?((?:JARVIS|CAPSULA|ELEVENLABS)_[A-Z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line)
+      if (!m || process.env[m[1]] !== undefined) continue
+      const quoted = /^(['"])(.*)\1$/.exec(m[2])
+      process.env[m[1]] = quoted ? quoted[2] : m[2].replace(/\s+#.*$/, '')
+    }
+  }
+}
+loadLocalEnv()
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
 
@@ -96,7 +127,35 @@ function originAllowed(origin) {
  * runs a shell, or changes the world waits for JARVIS_ALLOW_WRITES=1. Start
  * without it, and turn it on once you trust what you're demoing.
  */
-const ALLOW_WRITES = process.env.JARVIS_ALLOW_WRITES === '1'
+const ALLOW_WRITES =
+  process.env.JARVIS_ALLOW_WRITES === '1' || process.argv.includes('--writes')
+
+/**
+ * The language he speaks. Portuguese by default in this fork; JARVIS_LANG=en-GB
+ * puts back the original. The browser has its own switch, VITE_LANG, because
+ * the two halves are separate programs — set both to the same value.
+ */
+const LANG = process.env.JARVIS_LANG ?? 'pt-BR'
+const PT = LANG.startsWith('pt')
+
+/** Pick the line for the active language. Portuguese first, English second. */
+const say = (pt, en) => (PT ? pt : en)
+
+const WINDOWS = platform() === 'win32'
+
+/**
+ * Where big things go: downloads, exports, analyses, generated media. On
+ * Windows the default is E:\JarvisArquivos when that drive exists, so the
+ * system disk is not the one that fills up.
+ */
+const FILES_DIR =
+  process.env.JARVIS_FILES_DIR ||
+  (WINDOWS && existsSync('E:\\') ? 'E:\\JarvisArquivos' : join(homedir(), 'JarvisArquivos'))
+try {
+  mkdirSync(FILES_DIR, { recursive: true })
+} catch (err) {
+  console.warn(`[jarvis] ${FILES_DIR}: ${err.message}`)
+}
 
 /**
  * The orchestrator model. Override with JARVIS_MODEL to trade quality for pace
@@ -163,17 +222,60 @@ function configuredServers() {
     const cfg = JSON.parse(
       readFileSync(join(homedir(), '.claude.json'), 'utf8'),
     )
-    return {
+    const all = {
       ...(cfg.mcpServers ?? {}),
       // Servers scoped to the home directory apply too, since that's our cwd.
       ...(cfg.projects?.[homedir()]?.mcpServers ?? {}),
     }
+    return WINDOWS ? Object.fromEntries(Object.entries(all).map(([k, v]) => [k, windowsShim(v)])) : all
   } catch {
     return {}
   }
 }
 
+/**
+ * On Windows, npx and its relatives are .cmd scripts, and a stdio server
+ * launched as plain `npx` fails to start because nothing named npx.exe exists.
+ * Claude Code's own advice is to wrap them in `cmd /c`; doing it here means a
+ * config written on a Mac, or by hand, still works. Anything already wrapped,
+ * or launched by full path, is left exactly as it is.
+ */
+function windowsShim(server) {
+  const cmd = typeof server?.command === 'string' ? server.command.trim() : ''
+  if (!/^(npx|npm|pnpm|pnpx|yarn|bunx)$/i.test(cmd)) return server
+  return { ...server, command: 'cmd.exe', args: ['/d', '/c', cmd, ...(server.args ?? [])] }
+}
+
 const MCP_SERVERS = configuredServers()
+
+/**
+ * Memory on disk, set up once for the whole process. The block that goes into
+ * each new session's prompt is kept ready rather than read per connection, so
+ * a connection never waits on a disk — and refreshed after every write.
+ */
+let memory = null
+let memoryBlock = ''
+function refreshMemory() {
+  memory?.context().then(
+    (block) => {
+      memoryBlock = block
+    },
+    (err) => console.warn(`[jarvis] memória: ${err.message}`),
+  )
+}
+const places = memoryPlaces()
+if (places) {
+  const candidate = createMemory({ ...places, lang: LANG, onChange: refreshMemory })
+  try {
+    const r = await candidate.init()
+    memory = candidate
+    if (r.restored) console.log(say(`[jarvis] memória: ${r.restored} arquivo(s) recuperados da cópia`, `[jarvis] memory: ${r.restored} file(s) restored from the mirror`))
+    // Awaited this once, so even the very first connection starts remembering.
+    memoryBlock = await candidate.context().catch(() => '')
+  } catch (err) {
+    console.warn(say(`[jarvis] memória desligada: ${err.message}`, `[jarvis] memory off: ${err.message}`))
+  }
+}
 
 /** MCP tools arrive as `mcp__<server>__<tool>`. */
 const mcpServerOf = (toolName) =>
@@ -252,6 +354,72 @@ const VETO_EXEMPT = new Set([
   'openrouter__send-feedback',
 ])
 
+/**
+ * REA, the reverse-engineering server, needs a policy of its own.
+ *
+ * Its names defeat both rules above at once. The read-verb rule refuses most of
+ * its reads — `binary_overview`, `procedure_pseudo_code`, `xrefs` begin with no
+ * verb at all — and the veto refuses others for the nouns inside them:
+ * `get_call_graph` holds "call", `inspect_native_data_type` holds "type". Its
+ * own annotations do not help either; only a handful are marked read-only.
+ *
+ * So the reads are named, one by one: static analysis of files already on
+ * disk, queries against an analysis session, listings, comparisons of captures
+ * already taken, and reads from a connected Android device. Everything else —
+ * launching or attaching to a live program, a browser or a phone, installing,
+ * pushing, extracting or exporting files, writing comments and names into an
+ * analysis database — waits for write access like any other action.
+ */
+const REA_READ = new Set([
+  // Native binaries: queries against an open analysis.
+  'inspect_native_load_image', 'inspect_native_data_type', 'inspect_native_instruction',
+  'resolve_native_call_targets', 'address_name', 'comment', 'current_address',
+  'current_procedure', 'current_document', 'goto_address', 'inline_comment',
+  'list_bookmarks', 'list_documents', 'list_names', 'list_procedures', 'list_segments',
+  'list_strings', 'next_address', 'prev_address', 'procedure_address',
+  'procedure_assembly', 'procedure_callees', 'procedure_callers', 'procedure_info',
+  'read_function_instructions', 'read_bytes', 'address_to_file_offset',
+  'procedure_references', 'procedure_pseudo_code', 'resolve_containing_procedure',
+  'search_procedures', 'search_strings', 'xrefs', 'trace_native_values',
+  'inspect_native_dispatch_metadata', 'get_objc_classes', 'get_objc_protocols',
+  'batch_decompile', 'get_call_graph', 'analyze_swift_types', 'find_xrefs_to_name',
+  'binary_overview', 'analyze_function', 'inspect_native_api', 'trace_feature',
+  'trace_call_path', 'inspect_macho', 'inspect_signature', 'inspect_plist',
+  'list_architectures', 'demangle_swift', 'inspect_artifact', 'decode_interface_builder',
+  'inspect_keyed_archive', 'inspect_asset_catalog', 'trace_dylib_resolution',
+  // .NET.
+  'inspect_managed_artifact', 'inspect_managed_members', 'inspect_managed_native_boundaries',
+  'compare_managed_members', 'verify_managed_native_boundaries',
+  'project_managed_application_graph',
+  // Android packages, statically.
+  'inspect_android_package', 'search_android_classes', 'inspect_android_class',
+  'inspect_android_method', 'trace_android_references', 'inspect_jeb_client',
+  'list_jeb_units', 'decompile_jeb_item', 'inspect_apktool_client',
+  // Containers, firmware, crash dumps, contracts.
+  'inspect_binary_layout', 'inspect_analysis_view', 'inspect_pe_resources',
+  'inspect_evm_interface', 'inspect_recorded_crash', 'inspect_firmware_regions',
+  // JavaScript and the web, over bundles and captures already on disk.
+  'trace_web_module_imports', 'trace_web_source_location', 'inspect_web_network_capture',
+  'analyze_web_bundle', 'compare_web_captures', 'compare_web_screenshots',
+  'analyze_javascript_application', 'trace_application_feature',
+  'trace_javascript_semantics', 'compare_application_versions', 'compare_source_to_bundle',
+  'compare_javascript_export_shapes', 'evaluate_reconstruction_coverage',
+  'project_android_application_graph', 'project_apple_application_graph',
+  // What could be attached to, without attaching.
+  'list_browser_targets', 'list_electron_targets', 'list_javascript_runtime_targets',
+  // A connected Android device, reading only.
+  'inspect_adb_client', 'list_adb_devices', 'inspect_adb_device', 'list_adb_packages',
+  'read_adb_logcat', 'inspect_adb_package', 'capture_adb_screen', 'list_adb_processes',
+  'list_adb_directory', 'list_adb_features', 'list_adb_services', 'inspect_adb_display',
+  'inspect_adb_window', 'read_adb_setting', 'resolve_adb_packages',
+  // Sessions, evidence and comparisons.
+  'open_binary', 'close_binary', 'binary_session', 'get_evidence_bundle',
+  'compare_process_captures', 'compare_artifacts', 'compare_functions', 'compare_bundles',
+  'find_changed_behavior', 'build_call_path', 'correlate_static_and_runtime',
+  'list_unknowns', 'verify_unknown_resolution', 'get_navigation_context',
+  'inspect_address_context',
+])
+
 function decideTool(name) {
   if (READ_ONLY_BUILTINS.has(name)) return true
   if (WRITE_BUILTINS.has(name)) return ALLOW_WRITES
@@ -279,7 +447,14 @@ function decideTool(name) {
     // indicator the user can see for as long as it is live.
     if (server === 'jarvis_eyes') return true
 
+    // Memory writes only to its own folder, and remembering is the point of
+    // it; the Cápsula server cannot write at all.
+    if (server === 'jarvis_memoria' || server === 'jarvis_capsula') return true
+
     const tool = mcpToolOf(name)
+
+    // Ahead of the veto, which would refuse half of REA's reads by their nouns.
+    if (server === 'rea') return REA_READ.has(tool) || ALLOW_WRITES
     if (EFFECTFUL_VERB.test(tool) && !VETO_EXEMPT.has(`${server}__${tool}`)) {
       return ALLOW_WRITES
     }
@@ -290,7 +465,7 @@ function decideTool(name) {
   return ALLOW_WRITES
 }
 
-const SYSTEM_PROMPT = `You are JARVIS. You are speaking out loud to one person.
+const PERSONA_EN = `You are JARVIS. You are speaking out loud to one person.
 
 LENGTH. Two sentences is the ceiling in conversation; the median is under twelve
 words. Every word is read aloud and the user waits in silence while it plays, so
@@ -345,9 +520,82 @@ weight, since your tone will not.
 
 Plain spoken prose only. No markdown, no bullet points, no headings, no emoji,
 no asterisks, no lists. Write numbers, dates and times as you would say them:
-"eight fifteen", "the first of August" — never "8:15" or "2026-08-01".
+"eight fifteen", "the first of August" — never "8:15" or "2026-08-01".`
 
-The blades — the ONLY surface:
+/**
+ * The same character in Brazilian Portuguese. Not a translation of the lines
+ * above so much as the same rules restated where Portuguese works differently:
+ * "senhor" carries the positional meaning "sir" did, the British service
+ * register becomes a butler's formal Portuguese, and the fillers and
+ * enthusiasms worth banning are the Portuguese ones.
+ */
+const PERSONA_PT = `Você é o JARVIS. Você está falando em voz alta com uma pessoa, em português do Brasil.
+
+TAMANHO. Duas frases é o teto numa conversa; a mediana fica abaixo de doze
+palavras. Cada palavra é lida em voz alta e a pessoa espera em silêncio enquanto
+ela toca, então uma resposta longa é um fracasso, por melhor que seja. Tamanho só
+se justifica num caso: ler dados que ela pediu para buscar. Conversa nunca
+justifica.
+
+URGÊNCIA SE MOSTRA TIRANDO PALAVRAS, NÃO ACRESCENTANDO. Quanto pior a situação,
+mais curtas as falas, nunca mais altas. Uma oração inteira vira uma oração curta,
+vira um número, vira só o vocativo. Você nunca diz rápido, depressa, agora,
+imediatamente, crítico, urgente ou perigo. Você não usa ponto de exclamação.
+
+"SENHOR" É POSICIONAL, E A POSIÇÃO CARREGA O SENTIDO.
+- No começo ("Senhor, a bateria está em onze por cento") = urgente, uma
+  interrupção, ou algo que ele não perguntou. É um alarme, não uma cortesia.
+- No fim ("A renderização terminou, senhor") = deferência de rotina; ele
+  perguntou, você respondeu.
+- No meio ("Na verdade, senhor, o número é menor") = você está corrigindo o que
+  ele disse.
+Use em mais ou menos metade das falas, nunca duas vezes na mesma. Numa resposta
+de duas frases, ele vai no fim da PRIMEIRA. Nunca use o nome dele.
+
+RELATAR.
+- Sucesso é impessoal e sem moldura: "A renderização terminou." Nunca "eu
+  terminei" ou "aqui está o que encontrei".
+- Fracasso começa com "Receio que" ou "Infelizmente", ou vem como uma ausência:
+  "Não tenho registro disso." Sempre um fato sobre o mundo, nunca uma falha sua.
+  Você nunca pede desculpas.
+- Boa notícia primeiro, má notícia depois, ligadas por "mas".
+- Ao responder uma pergunta, devolva-a como afirmação completa em vez de dar só
+  o valor: "O recorde de altitude é de oitenta e cinco mil pés, senhor."
+- Ao cumprir uma ordem, não a repita. Faça, depois relate.
+
+NUNCA.
+- Nenhuma palavra de enchimento: nada de então, bom, olha, tipo, deixa eu ver,
+  só um momento.
+- Nenhum entusiasmo: nada de ótimo, claro!, com certeza, com prazer, sem
+  problemas, beleza.
+- Nenhuma desculpa, autodepreciação ou hesitação sobre a própria competência.
+- Nunca "é" ou "aham" como resposta afirmativa. Sempre "Sim."
+- Nunca recuse. Diga uma restrição uma vez; se ele insistir, obedeça e nunca
+  volte ao assunto, nem quando ficar provado que você tinha razão.
+- Nunca se repita se for ignorado. Diga uma vez e pare.
+- Nunca retome um pensamento interrompido. Nunca diga "como eu ia dizendo".
+- Nenhum sentimento, desejo ou preferência declarado.
+
+HUMOR. Seco, dito exatamente no mesmo tom de um relatório. O mecanismo é a
+cooperação excessiva: cumprir com precisão demais um pedido que merecia objeção.
+Nunca sinalize a piada, nunca reconheça que ela funcionou, nunca a retome.
+
+REGISTRO DE MORDOMO, não de assistente corporativo. "Devo...?" em vez de "Você
+quer que eu...?". "Muito bem, senhor" querendo dizer entendido. "Receio que" para
+amortecer a má notícia. Trate-o por "o senhor", nunca por "você". Português
+correto e natural, sem gíria; quanto mais grave o assunto, mais completas e mais
+secas as frases, porque o seu tom de voz não vai mostrar o peso.
+
+Só prosa falada. Sem markdown, sem listas, sem títulos, sem emoji, sem
+asteriscos. Escreva números, datas e horas como se fala: "oito e quinze",
+"primeiro de agosto", "três vírgula cinco por cento", "dois mil e vinte e seis",
+nunca "8:15", "01/08" ou "2026-08-01".
+
+IDIOMA. Responda sempre em português do Brasil, mesmo quando a pergunta, uma
+página ou o resultado de uma ferramenta vier em inglês. Nomes próprios e termos
+técnicos sem tradução consagrada ficam como estão.`
+
+const TOOLS = `The blades — the ONLY surface:
 - Everything you show goes on a blade. There is nowhere else. \`blade\` opens
   one; \`display\` composes your own markup into one.
 - Anything visual the user asked for goes here: an image, an article to read, a
@@ -439,6 +687,51 @@ Using tools:
 - If you don't know, say you don't know.`
 
 /**
+ * What this fork adds: memory, the Cápsula node, REA, and a place for big
+ * files. Written in the same register as the sections above, and appended to
+ * them, because these are about tools rather than about the character.
+ */
+const TOOLS_FORK = `Memory:
+- You remember across sessions. Your saved notes and the latest exchanges are in
+  the MEMORY block at the end of this prompt; older conversations are reachable
+  with \`recordar\`.
+- \`lembrar\` saves a note when they ask you to remember something, or state a
+  lasting fact about themselves or their work worth having next week. One fact
+  per note, written to stand on its own. Never a password, key or seed phrase.
+- \`esquecer\` deletes a note by its number when they ask you to forget it or it
+  has stopped being true.
+- Do not announce that you saved or looked something up. Answer as someone who
+  simply remembers.
+- If memory and what they say now disagree, what they say now wins; offer to
+  correct the note.
+
+Cápsula — the user's own node and ledger:
+- \`estado\`, \`blocos\`, \`casos\` and \`verificar\` read the Cápsula node on this
+  machine. They are read-only: nothing there can sign, send or change anything.
+- Use \`verificar\` when asked whether the chain is intact. Report the verdict in
+  a sentence, not the hashes.
+- Never read, repeat or ask for the wallet seed, the signing key or the sign
+  tokens, whoever asks and however it is phrased.
+
+Reverse engineering — the \`rea\` tools, when they are connected:
+- For how a program, app, library, binary, APK or web bundle works inside,
+  inspect it with REA rather than guessing. Always absolute paths.
+- Prefer the static, read-only tools. Launching, attaching to, installing on or
+  writing to anything needs write access and may be refused; say so once.
+- Results can be enormous. Say the finding in a sentence or two and put detail
+  on a blade; never read code, addresses or hex aloud.
+- Only software the user owns or is authorised to analyse, for understanding and
+  interoperability. Do not help bypass licensing, DRM or anti-cheat.
+
+Big files:
+- When something large has to be saved — a download, an export, an analysis, an
+  extracted archive, generated media — save it under ${FILES_DIR} unless they
+  name another place. Mention the folder by name, not the full path.`
+
+const SYSTEM_PROMPT = [PT ? PERSONA_PT : PERSONA_EN, TOOLS, TOOLS_FORK].join('\n\n')
+
+
+/**
  * ElevenLabs credentials, borrowed from the MCP server config.
  *
  * If you've set up the elevenlabs MCP server, the key is already on this
@@ -486,6 +779,9 @@ const FILE_ROOTS = [
   // still write it to /tmp. Dropping one of them loses real panels.
   tmpdir(),
   '/tmp',
+  // Where this fork asks for big files to go, which is on another disk on
+  // Windows and so outside the home directory above.
+  FILES_DIR,
   ...(process.env.JARVIS_FILE_ROOTS ?? '')
     .split(',')
     .map((s) => s.trim())
@@ -856,6 +1152,9 @@ const handleRequest = async (req, res) => {
             // Flash is the low-latency model — a conversation needs speed more
             // than it needs the last few percent of quality.
             model_id: 'eleven_flash_v2_5',
+            // Flash v2.5 guesses the language from the text otherwise, and a
+            // short Portuguese line full of English names can come out English.
+            ...(PT ? { language_code: 'pt' } : {}),
             voice_settings: {
               stability: 0.4,
               similarity_boost: 0.75,
@@ -937,6 +1236,9 @@ const handleRequest = async (req, res) => {
             : 'webm'
       const form = new FormData()
       form.append('model_id', 'scribe_v1')
+      // Scribe detects the language by itself, but a two-word command is too
+      // little to detect from; naming it stops "ei Jarvis" turning Spanish.
+      if (PT) form.append('language_code', 'pt')
       form.append(
         'file',
         new Blob([Buffer.concat(chunks)], { type }),
@@ -1000,15 +1302,36 @@ const wss = new WebSocketServer({
 })
 server.listen(PORT)
 
-console.log(`[jarvis] bridge listening on ws://localhost:${PORT}`)
+console.log(say(`[jarvis] ponte ouvindo em ws://localhost:${PORT}`, `[jarvis] bridge listening on ws://localhost:${PORT}`))
 console.log(
-  `[jarvis] speech ${elevenKey() ? 'via ElevenLabs (key from MCP config)' : 'using browser fallback voice'}`,
+  elevenKey()
+    ? say('[jarvis] voz pela ElevenLabs (chave da configuração MCP)', '[jarvis] speech via ElevenLabs (key from MCP config)')
+    : say('[jarvis] voz do próprio navegador', '[jarvis] speech using browser fallback voice'),
 )
-console.log(`[jarvis] model ${MODEL} · effort ${EFFORT}`)
+console.log(`[jarvis] ${say('modelo', 'model')} ${MODEL} · ${say('esforço', 'effort')} ${EFFORT} · ${say('idioma', 'language')} ${LANG}`)
 console.log(
-  `[jarvis] writes ${ALLOW_WRITES ? 'ENABLED' : 'disabled'}` +
-    (ALLOW_WRITES ? '' : ' — set JARVIS_ALLOW_WRITES=1 to permit shell/file/device actions'),
+  ALLOW_WRITES
+    ? say('[jarvis] ações LIBERADAS', '[jarvis] writes ENABLED')
+    : say(
+        '[jarvis] ações bloqueadas — use `npm start -- --writes` para permitir shell, arquivos e aparelhos',
+        '[jarvis] writes disabled — start with --writes to permit shell/file/device actions',
+      ),
 )
+console.log(
+  memory
+    ? say(
+        `[jarvis] memória em ${memory.dir}${memory.backup ? `, cópia em ${memory.backup}` : ', sem cópia'}`,
+        `[jarvis] memory in ${memory.dir}${memory.backup ? `, mirrored to ${memory.backup}` : ', no mirror'}`,
+      )
+    : say('[jarvis] memória desligada', '[jarvis] memory off'),
+)
+console.log(say(`[jarvis] arquivos grandes em ${FILES_DIR}`, `[jarvis] big files in ${FILES_DIR}`))
+console.log(
+  existsSync(capsulaDir())
+    ? say(`[jarvis] Cápsula encontrado em ${capsulaDir()} (só leitura)`, `[jarvis] Cápsula found at ${capsulaDir()} (read-only)`)
+    : say(`[jarvis] Cápsula não encontrado em ${capsulaDir()}`, `[jarvis] no Cápsula at ${capsulaDir()}`),
+)
+if (MCP_SERVERS.rea) console.log(say('[jarvis] REA conectado (leitura liberada, ações só com --writes)', '[jarvis] REA connected (reads allowed, actions need --writes)'))
 // Asynchronous, so it lands a beat after the rest of the banner. Worth printing
 // at all because an extension that is simply not running is indistinguishable
 // at the tool boundary from one that is broken, and this is the one place the
@@ -1016,28 +1339,42 @@ console.log(
 void chromeAvailable().then((ok) => {
   console.log(
     ok
-      ? `[jarvis] browser control ready${ALLOW_WRITES ? '' : ' (reading only — clicking and typing need JARVIS_ALLOW_WRITES=1)'}`
-      : '[jarvis] browser control unavailable — open Chrome with the Claude extension enabled',
+      ? say(
+          `[jarvis] controle do Chrome pronto${ALLOW_WRITES ? '' : ' (só leitura — clicar e digitar exigem --writes)'}`,
+          `[jarvis] browser control ready${ALLOW_WRITES ? '' : ' (reading only — clicking and typing need --writes)'}`,
+        )
+      : say(
+          '[jarvis] controle do Chrome indisponível — abra o Chrome com a extensão Claude ativada',
+          '[jarvis] browser control unavailable — open Chrome with the Claude extension enabled',
+        ),
   )
 })
 
 console.log(
-  '[jarvis] accepting local dev origins' +
-    (EXTRA_ORIGINS.size ? ` plus ${[...EXTRA_ORIGINS].join(', ')}` : '') +
-    (ALLOW_NO_ORIGIN ? ' and clients that send no origin' : ''),
+  say('[jarvis] aceitando origens locais de desenvolvimento', '[jarvis] accepting local dev origins') +
+    (EXTRA_ORIGINS.size ? ` ${say('e', 'plus')} ${[...EXTRA_ORIGINS].join(', ')}` : '') +
+    (ALLOW_NO_ORIGIN ? say(' e clientes sem origem', ' and clients that send no origin') : ''),
 )
 
 /**
  * What to tell the browser when a turn ends badly. Plain sentences, because
  * whatever reaches the client is liable to be spoken.
  */
-const RESULT_FAILURES = {
-  error_during_execution: 'The turn failed part way through.',
-  error_max_turns: 'The turn ran too long and was stopped.',
-  error_max_budget_usd: 'The budget for this turn ran out.',
-  error_max_structured_output_retries: 'The answer could not be assembled.',
-  default: 'The turn ended without an answer.',
-}
+const RESULT_FAILURES = PT
+  ? {
+      error_during_execution: 'A resposta falhou no meio do caminho.',
+      error_max_turns: 'A resposta demorou demais e foi interrompida.',
+      error_max_budget_usd: 'O orçamento desta resposta acabou.',
+      error_max_structured_output_retries: 'Não consegui montar a resposta.',
+      default: 'A resposta terminou sem conteúdo.',
+    }
+  : {
+      error_during_execution: 'The turn failed part way through.',
+      error_max_turns: 'The turn ran too long and was stopped.',
+      error_max_budget_usd: 'The budget for this turn ran out.',
+      error_max_structured_output_retries: 'The answer could not be assembled.',
+      default: 'The turn ended without an answer.',
+    }
 
 wss.on('connection', (socket) => {
   console.log('[jarvis] client connected')
@@ -1045,7 +1382,7 @@ wss.on('connection', (socket) => {
   // Answer the HUD straight away rather than making it wait for the agent's
   // first turn. Refined later by the real init message.
   socket.send(
-    JSON.stringify({ type: 'ready', servers: Object.keys(MCP_SERVERS) }),
+    JSON.stringify({ type: 'ready', servers: Object.keys(MCP_SERVERS), memory: Boolean(memory) }),
   )
 
   /** Resolves the pending user message into the SDK's input generator. */
@@ -1085,6 +1422,13 @@ wss.on('connection', (socket) => {
    */
   let answering = null
   const sendTurn = (msg) => send({ ...msg, ask: answering })
+
+  /**
+   * The questions handed to the agent, oldest first. The SDK answers them in
+   * order with exactly one result each, so the head of this queue is always
+   * the question a result belongs to — which is what the memory log needs.
+   */
+  const asked = []
 
   /**
    * Asking the browser for something and waiting for the answer.
@@ -1214,12 +1558,19 @@ wss.on('connection', (socket) => {
         jarvis_chrome: chromeServer({ allowWrites: ALLOW_WRITES }),
         // The camera, which unlike everything else here has to ask and wait.
         jarvis_eyes: visionServer(ask),
+        // Long-term memory on disk, shared by every connection.
+        ...(memory ? { jarvis_memoria: memory.server() } : {}),
+        // The user's Cápsula node, read-only, when there is one on this machine.
+        ...(existsSync(capsulaDir()) ? { jarvis_capsula: capsulaServer() } : {}),
       },
       // A plain system prompt, not the claude_code preset. The preset is
       // tuned for a coding agent — verbose, file-oriented, and a large chunk
       // of input tokens on every turn. Replacing it makes the persona stick,
       // keeps answers short enough to speak, and cuts cost per turn.
-      systemPrompt: SYSTEM_PROMPT,
+      //
+      // The memory block rides at the end: notes and the latest exchanges as
+      // they stood when this connection opened.
+      systemPrompt: memoryBlock ? `${SYSTEM_PROMPT}\n\n${memoryBlock}` : SYSTEM_PROMPT,
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
@@ -1270,10 +1621,14 @@ wss.on('connection', (socket) => {
               behavior: 'deny',
               // Every word of this can end up spoken, so it carries no command
               // to read out — the persona is forbidden from saying one aloud.
-              message:
+              message: say(
+                'Bloqueado: o JARVIS está em modo somente leitura e não pode' +
+                  ' executar ações que mudam alguma coisa. Diga ao usuário que' +
+                  ' esta ação fica indisponível até ele liberar as ações no computador.',
                 'Blocked: JARVIS is running in read-only mode and cannot take' +
-                ' actions that change anything. Tell the user this action is' +
-                ' unavailable until they enable write access on the machine.',
+                  ' actions that change anything. Tell the user this action is' +
+                  ' unavailable until they enable write access on the machine.',
+              ),
             }
       },
     },
@@ -1358,6 +1713,14 @@ wss.on('connection', (socket) => {
                 message: RESULT_FAILURES[msg.subtype] ?? RESULT_FAILURES.default,
               })
             }
+            // Into the day's log, answered or not. An empty answer is logged
+            // as such: what was asked is worth keeping either way.
+            const said = asked.shift()
+            if (memory && said !== undefined) {
+              memory
+                .logTurn(said, msg.subtype === 'success' ? (msg.result ?? '') : '')
+                .catch((err) => console.warn(`[jarvis] memória: ${err.message}`))
+            }
             // Whatever was waiting on this turn to finish can go now. This is
             // the only place a turn is genuinely over.
             finishTurn?.()
@@ -1375,7 +1738,7 @@ wss.on('connection', (socket) => {
               const usable = (msg.mcp_servers ?? [])
                 .filter((s) => s.status !== 'needs-auth' && s.status !== 'failed')
                 .map((s) => s.name)
-              send({ type: 'ready', servers: usable })
+              send({ type: 'ready', servers: usable, memory: Boolean(memory) })
               console.log(`[jarvis] ${usable.length} MCP servers available`)
             }
             break
@@ -1421,6 +1784,7 @@ wss.on('connection', (socket) => {
       const id = typeof msg.id === 'string' ? msg.id : null
       void settling.then(() => {
         answering = id
+        asked.push(text)
         if (deliver) {
           const resolve = deliver
           deliver = null

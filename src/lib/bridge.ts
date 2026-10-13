@@ -1,6 +1,7 @@
 import type { AskHandlers } from './anthropic'
 import type { Blade, Panel } from '../store'
 import { BRIDGE_WS_URL } from '../config'
+import { t } from './lang'
 
 /**
  * Client for the local bridge (see bridge/server.mjs).
@@ -35,6 +36,8 @@ type Frame = {
   seconds?: number
   when?: string
   servers?: Array<string | { name?: string }>
+  /** Whether the bridge keeps a memory on disk across sessions. */
+  memory?: boolean
 }
 
 /** Every question gets an id so its answer can be told from anyone else's. */
@@ -46,6 +49,12 @@ let connecting: Promise<WebSocket> | null = null
 /** Server names reported by the bridge, for the HUD readout. */
 let servers: string[] = []
 export const bridgeServers = () => servers
+
+/** Whether the bridge said it remembers across sessions. Read on reconnect,
+ *  which fires before the new connection's own `ready` arrives — the setting
+ *  belongs to the bridge process, so the previous connection's answer holds. */
+let remembers = false
+export const bridgeRemembers = () => remembers
 
 /** The list arrives twice — once from config, once with live status — so the
  *  HUD subscribes rather than reading it a single time at boot. */
@@ -175,6 +184,7 @@ function dispatch(ws: WebSocket) {
       servers = (msg.servers ?? [])
         .map((s) => (typeof s === 'string' ? s : (s.name ?? '')))
         .filter(Boolean)
+      if (typeof msg.memory === 'boolean') remembers = msg.memory
       onServers?.(servers)
       firstReady.resolve()
     } else if (msg.type === 'panel' && msg.panel) {
@@ -189,7 +199,7 @@ function dispatch(ws: WebSocket) {
         }
       }
       if (!onCapture) {
-        reply({ error: 'The interface has no camera handler.' })
+        reply({ error: t('A interface não tem controle de câmera.', 'The interface has no camera handler.') })
       } else {
         // Always answers, even on failure: the bridge is holding a turn open
         // waiting for this, and a rejection that never arrives is a turn that
@@ -238,7 +248,11 @@ function connect(): Promise<WebSocket> {
 
     const timer = setTimeout(() => {
       ws.close()
-      settle(new Error('Bridge not responding — is `npm run bridge` running?'))
+      settle(
+        new Error(
+          t('A ponte não responde — o `npm run bridge` está rodando?', 'Bridge not responding — is `npm run bridge` running?'),
+        ),
+      )
     }, 6000)
 
     ws.onopen = () => {
@@ -275,7 +289,7 @@ function connect(): Promise<WebSocket> {
     ws.onclose = () => {
       // A close before open is just a failed dial; after open it's a lost
       // session, and the two want different handling.
-      settle(new Error('The bridge closed the connection.'))
+      settle(new Error(t('A ponte fechou a conexão.', 'The bridge closed the connection.')))
       if (socket === ws) {
         socket = null
         onConnection?.('lost')
@@ -398,7 +412,7 @@ export async function ask(
     const arm = () => {
       clearTimeout(timer)
       timer = window.setTimeout(() => {
-        fail(new Error('The bridge went quiet — that turn was lost, sir.'))
+        fail(new Error(t('A ponte ficou em silêncio — essa resposta se perdeu, senhor.', 'The bridge went quiet — that turn was lost, sir.')))
       }, IDLE_TIMEOUT_MS)
     }
 
@@ -445,7 +459,7 @@ export async function ask(
             break
 
           case 'error':
-            fail(new Error(msg.message ?? 'The bridge reported an error.'))
+            fail(new Error(msg.message ?? t('A ponte informou um erro.', 'The bridge reported an error.')))
             break
         }
       } catch (err) {
@@ -454,10 +468,10 @@ export async function ask(
     }
 
     const onClose = () => {
-      fail(new Error('The bridge disconnected mid-answer — that session is gone.'))
+      fail(new Error(t('A ponte caiu no meio da resposta — essa sessão se perdeu.', 'The bridge disconnected mid-answer — that session is gone.')))
     }
     const onError = () => {
-      fail(new Error('The connection to the bridge failed.'))
+      fail(new Error(t('A conexão com a ponte falhou.', 'The connection to the bridge failed.')))
     }
 
     pending = { finish }

@@ -15,38 +15,66 @@
  *   - No filler words, no enthusiasm, no apology, no exclamation marks.
  *   - "Sir" fronted means urgency; final means routine. These are all routine,
  *     so it goes at the end, and only sometimes.
+ *
+ * The Portuguese lines keep the same grammar: a bare gerund ("Compilando.",
+ * "Cruzando referências."), "senhor" at the end and only sometimes, nothing
+ * eager like "já vou" or "rapidinho".
  */
 
+import { isPt } from './lang'
+
+/** The pool for the active language. */
+const L = (pt: string[], en: string[]) => (isPt ? pt : en)
+
 /** Said as soon as the first tool fires, before any answer exists. */
-const WORKING = [
-  'Working on it, sir.',
-  'Compiling.',
-  'Retrieving.',
-  'Accessing the archive.',
-  'Cross-referencing.',
-  'Running the query now.',
-  'Searching.',
-  'Under way.',
-]
+const WORKING = L(
+  [
+    'Trabalhando nisso, senhor.',
+    'Compilando.',
+    'Recuperando.',
+    'Acessando o arquivo.',
+    'Cruzando referências.',
+    'Executando a consulta.',
+    'Pesquisando.',
+    'Em andamento.',
+  ],
+  [
+    'Working on it, sir.',
+    'Compiling.',
+    'Retrieving.',
+    'Accessing the archive.',
+    'Cross-referencing.',
+    'Running the query now.',
+    'Searching.',
+    'Under way.',
+  ],
+)
 
 /** Acknowledging an order where no tool is involved. */
-const ACKNOWLEDGE = [
-  'As you wish, sir.',
-  'Very good, sir.',
-  'Certainly.',
-  'Understood.',
-  'Consider it done.',
-  'Directly, sir.',
-]
+const ACKNOWLEDGE = L(
+  [
+    'Como quiser, senhor.',
+    'Muito bem, senhor.',
+    'Certamente.',
+    'Entendido.',
+    'Considere feito.',
+    'Em instantes, senhor.',
+  ],
+  [
+    'As you wish, sir.',
+    'Very good, sir.',
+    'Certainly.',
+    'Understood.',
+    'Consider it done.',
+    'Directly, sir.',
+  ],
+)
 
 /** Answering to his name, before the user has said what they want. */
-const ATTENTION = [
-  'Yes, sir?',
-  'Sir?',
-  'At your service, sir.',
-  'Standing by.',
-  'Awake, sir.',
-]
+const ATTENTION = L(
+  ['Pois não, senhor?', 'Senhor?', 'Às suas ordens, senhor.', 'A postos.', 'Estou aqui, senhor.'],
+  ['Yes, sir?', 'Sir?', 'At your service, sir.', 'Standing by.', 'Awake, sir.'],
+)
 
 /**
  * Avoids repeating the same phrase twice running, which is what makes canned
@@ -91,9 +119,45 @@ type Rule = {
   lines: string[]
 }
 
-const FOOTAGE = ['Assembling the footage.', 'Rendering the sequence.']
+const FOOTAGE = L(
+  ['Montando as imagens.', 'Renderizando a sequência.'],
+  ['Assembling the footage.', 'Rendering the sequence.'],
+)
 
 const BY_TOOL: Rule[] = [
+  // This fork's own servers. Their names are exact, so they go ahead of the
+  // looser rules below.
+  // A rule matches on either half, so the memory verbs are told apart by the
+  // tool half alone; a server rule would answer "Anotando." to a recall.
+  {
+    tool: /^lembrar$/,
+    lines: L(['Anotando.', 'Guardando isso, senhor.'], ['Noting it.', 'Filing that away, sir.']),
+  },
+  {
+    tool: /^esquecer$/,
+    lines: L(['Apagando a anotação.'], ['Striking it from the record.']),
+  },
+  {
+    server: /memoria/,
+    lines: L(
+      ['Consultando a memória.', 'Puxando pela memória.'],
+      ['Consulting my notes.', 'Checking the record.'],
+    ),
+  },
+  {
+    server: /capsula/,
+    lines: L(
+      ['Consultando a Cápsula.', 'Lendo o livro-razão.'],
+      ['Consulting the Capsule.', 'Reading the ledger.'],
+    ),
+  },
+  {
+    server: /^rea$/,
+    lines: L(
+      ['Abrindo o binário.', 'Analisando o código.'],
+      ['Opening the binary.', 'Analysing the code.'],
+    ),
+  },
   // Video sits above image because higgsfield and palmier both do either, so
   // the verb in the tool name is the only thing separating them — a rule on the
   // server alone would send every generate_video to "Rendering."
@@ -101,50 +165,62 @@ const BY_TOOL: Rule[] = [
   {
     server: /higgsfield|openrouter-image|dalle|flux|midjourney/,
     tool: /image|photo|thumbnail|render|upscale|seedream/,
-    lines: ['Rendering.', 'Composing it now.'],
+    lines: L(['Renderizando.', 'Compondo agora.'], ['Rendering.', 'Composing it now.']),
   },
   // The editors, once the two rules that read the verb have had their turn.
   { server: /palmier|heygen|runway|descript/, lines: FOOTAGE },
   {
     server: /playwright|puppeteer|browserbase|chrome/,
     tool: /\bbrowser\b|navigate/,
-    lines: ['Opening the browser.', 'Navigating.'],
+    lines: L(['Abrindo o navegador.', 'Navegando.'], ['Opening the browser.', 'Navigating.']),
   },
   {
     server: /android|\badb\b|simulator/,
     tool: /\bdevice\b|\bapk\b|\bphone\b/,
-    lines: ['Reaching the device.', 'Connecting to your phone.'],
+    lines: L(
+      ['Acessando o aparelho.', 'Conectando ao seu celular.'],
+      ['Reaching the device.', 'Connecting to your phone.'],
+    ),
   },
   {
     server: /gmail|\bmail\b/,
     tool: /gmail|\bmail\b|email|inbox/,
-    lines: ['Checking your mail.', 'Reading the inbox.'],
+    lines: L(
+      ['Verificando seus e-mails.', 'Lendo a caixa de entrada.'],
+      ['Checking your mail.', 'Reading the inbox.'],
+    ),
   },
   // Calendar keys off "calendar" alone. "event" used to live here, which is how
   // a Mixpanel event query came out as "Checking your calendar."
   {
     tool: /calendar|\bdiary\b|\bmeeting\b/,
-    lines: ['Checking your calendar.', 'Consulting the diary.'],
+    lines: L(
+      ['Verificando sua agenda.', 'Consultando os compromissos.'],
+      ['Checking your calendar.', 'Consulting the diary.'],
+    ),
   },
   {
     server: /elevenlabs|openai-tts/,
     tool: /speech|\bvoice\b|\btts\b|text_to_sound/,
-    lines: ['Synthesising.', 'Working on it, sir.'],
+    lines: L(['Sintetizando.', 'Trabalhando nisso, senhor.'], ['Synthesising.', 'Working on it, sir.']),
   },
   {
     server: /spotify|sonos/,
     tool: /\bplay\b|\bmusic\b|playlist|\btrack\b/,
-    lines: ['Queuing it up.', 'Putting it on.'],
+    lines: L(['Colocando na fila.', 'Colocando para tocar.'], ['Queuing it up.', 'Putting it on.']),
   },
   {
     server: /^home|homeassistant|\bhue\b|\bhass\b/,
     tool: /\blights?\b|thermostat|\bdimmer\b/,
-    lines: ['Adjusting it now.', 'Seeing to it, sir.'],
+    lines: L(['Ajustando agora.', 'Cuidando disso, senhor.'], ['Adjusting it now.', 'Seeing to it, sir.']),
   },
   {
     server: /github|linear|jira|sentry/,
     tool: /\brepo\b|repository|\bissues?\b|pull_request|\bcommit\b/,
-    lines: ['Checking the repository.', 'Consulting the tracker.'],
+    lines: L(
+      ['Verificando o repositório.', 'Consultando os chamados.'],
+      ['Checking the repository.', 'Consulting the tracker.'],
+    ),
   },
   // Also where the anonymously named analytics servers land — theirs are bare
   // UUIDs, so only the tool half says anything: Get-Report, Get-Events,
@@ -153,12 +229,15 @@ const BY_TOOL: Rule[] = [
   {
     server: /mixpanel|clarity|posthog|amplitude/,
     tool: /analytic|\bmetrics?\b|\breports?\b|\bevents?\b|cohort|funnel|dashboard|\bquery\b/,
-    lines: ['Running the query.', 'Pulling the figures.'],
+    lines: L(
+      ['Executando a consulta.', 'Levantando os números.'],
+      ['Running the query.', 'Pulling the figures.'],
+    ),
   },
   {
     server: /\bexa\b|serper|serpapi|perplexity|tavily|brave/,
     tool: /search|\bweb\b|\bfetch\b|crawl|research/,
-    lines: ['Searching.', 'Consulting the record.'],
+    lines: L(['Pesquisando.', 'Consultando os registros.'], ['Searching.', 'Consulting the record.']),
   },
 ]
 

@@ -5,6 +5,7 @@ import { BRIDGE_HTTP_URL } from '../config'
 import { sanitisePanelHtml } from './sanitise'
 import { frameSpan, peaceScroll, pinchCount } from '../lib/hands'
 import * as camera from '../lib/camera'
+import { t } from '../lib/lang'
 
 /**
  * The blades.
@@ -143,8 +144,8 @@ const CameraView = memo(function CameraView() {
       .catch((err: DOMException) =>
         failed_(
           err?.name === 'NotAllowedError'
-            ? 'Camera access is not permitted.'
-            : `The camera could not be opened: ${err?.message ?? err}`,
+            ? t('O acesso à câmera não está autorizado.', 'Camera access is not permitted.')
+            : t(`Não consegui abrir a câmera: ${err?.message ?? err}`, `The camera could not be opened: ${err?.message ?? err}`),
         ),
       )
     return () => {
@@ -179,7 +180,7 @@ const Body = memo(function Body({ blade }: { blade: Blade }) {
 
   if (blade.kind === 'embed' && blade.url) {
     const embed = embedUrl(blade.url)
-    if (!embed) return <p className="bl-note">That video link could not be played.</p>
+    if (!embed) return <p className="bl-note">{t('Não consegui reproduzir esse link de vídeo.', 'That video link could not be played.')}</p>
     return (
       <iframe
         className="bl-frame"
@@ -232,7 +233,7 @@ const Body = memo(function Body({ blade }: { blade: Blade }) {
     )
   }
 
-  return <p className="bl-note">Nothing to show.</p>
+  return <p className="bl-note">{t('Nada para mostrar.', 'Nothing to show.')}</p>
 })
 
 /* -------------------------------------------------------------------- card */
@@ -547,7 +548,7 @@ function Card({
                 e.stopPropagation()
                 onExpand()
               }}
-              title={expanded ? 'Shrink (E)' : 'Full screen (E)'}
+              title={expanded ? t('Reduzir (E)', 'Shrink (E)') : t('Tela cheia (E)', 'Full screen (E)')}
             >
               {expanded ? '⤡' : '⤢'}
             </button>
@@ -671,7 +672,8 @@ export function Blades() {
 
       {blades.length > 1 && !expandedBlade && (
         <div className="bl-hint">
-          <kbd>[</kbd> <kbd>]</kbd> cycle · <kbd>E</kbd> full · <kbd>X</kbd> close
+          <kbd>[</kbd> <kbd>]</kbd> {t('alternar', 'cycle')} · <kbd>E</kbd> {t('tela cheia', 'full')} ·{' '}
+          <kbd>X</kbd> {t('fechar', 'close')}
         </div>
       )}
     </div>

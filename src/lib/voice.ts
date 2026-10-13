@@ -3,6 +3,7 @@ import { getMic } from './audio'
 import { speakingNow, speakingSince } from './tts'
 import { startVad, type Vad } from './vad'
 import { caps } from './capabilities'
+import { CONTINUES, LANG, OVERRIDE, STOP, WAKE, norm, t } from './lang'
 
 /**
  * The voice loop.
@@ -64,21 +65,7 @@ export type Voice = {
 /** One utterance often produces several partials containing his name. */
 const WAKE_DEBOUNCE = 1500
 
-/**
- * His name, and the only wake phrase.
- *
- * The optional prefix is genuinely optional: addressing him by name alone is
- * correct, and during an answer "Jarvis" on its own is the natural way to cut
- * in. The negative lookahead keeps possessives ("Jarvis's job") from waking him.
- *
- * The alternates are not padding. "Jarvis" is not in a general dictation
- * model's high-frequency vocabulary, and Chrome routinely returns Travis,
- * Jervis, Jarvys or Java's for a perfectly clear utterance — every one of which
- * used to be silently discarded, so the wake word "just didn't work" with no
- * indication why. Better a rare false wake than a name that does not answer.
- */
-const WAKE =
-  /\b(?:hey|hi|ok|okay|yo)?\s*(?:jarvis|jarvys|jervis|jarvis's|travis|jarviss|java's|jarv)\b(?!'s)/i
+// The wake phrase, its mishearings and the Portuguese forms live in lang.ts.
 
 /** Everything after the wake phrase, which is usually the actual command. */
 function afterWake(text: string): string {
@@ -116,14 +103,7 @@ function afterWake(text: string): string {
  * is a reason to wait.
  */
 
-/**
- * Ending on one of these means the sentence is not over, whatever the silence
- * says. Function words only: they are closed-class, so the list is complete in
- * a way a content-word list could never be, and none of them is a plausible
- * last word of a real request.
- */
-const CONTINUES =
-  /\b(and|or|but|so|because|since|if|when|while|that|which|who|whose|to|of|in|on|at|by|for|with|from|about|into|onto|over|under|between|through|the|a|an|my|your|his|her|its|our|their|is|are|was|were|be|been|do|does|did|have|has|had|can|could|would|should|will|shall|might|must|like|than|then|as|very|really|just|some|any|all|both|either|neither)$/i
+// CONTINUES — the words that mean "I haven't finished" — lives in lang.ts.
 
 /** Trailing punctuation a transcriber emits mid-thought. */
 const TRAILS = /[,;:–—-]$/
@@ -254,38 +234,8 @@ function makeAssembler(h: {
 // Hearing himself
 // ---------------------------------------------------------------------------
 
-const norm = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[^a-z0-9' ]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-/**
- * Short words that must always cut through, even when they collide with what
- * he happens to be saying. Suppressing "stop" because he just said "stop"
- * would be the single most infuriating failure this file could have.
- */
-const OVERRIDE =
-  /\b(stop|wait|jarvis|cancel|enough|quiet|hold on|shut up|never ?mind|forget it|no)\b/i
-
-/**
- * Words too common to be evidence of anything.
- *
- * This set is the difference between a usable filter and an infuriating one.
- * "What about the second one?" is a perfectly ordinary follow-up, and every
- * word in it is likely to appear somewhere in the answer it follows — so a
- * naive bag-of-words match suppresses the user's real question as an echo.
- * Only distinctive words count as proof he is hearing himself.
- */
-const STOP = new Set(
-  ('a an the and or but so of to in on at by for with from is are was were be ' +
-    'it its this that these those i you he she we they me him her them my your ' +
-    'our their what which who how why when where do does did can could would ' +
-    'should will shall not no yes if then than as about into over under out up ' +
-    'down one two three first second third now here there just very really got ' +
-    'get have has had say said tell me okay ok well right').split(' '),
-)
+// norm, OVERRIDE (stop words) and STOP (words too common to count as
+// evidence of an echo) live in lang.ts, per language.
 
 /**
  * Is this the microphone hearing the speakers?
@@ -393,8 +343,8 @@ export async function startVoice(h: VoiceHandlers): Promise<Voice> {
     diag.lastError = 'mic'
     h.onError(
       err instanceof DOMException && err.name === 'NotAllowedError'
-        ? 'Microphone access denied — voice input is unavailable.'
-        : 'No microphone available.',
+        ? t('O acesso ao microfone foi negado — a entrada de voz não está disponível.', 'Microphone access denied — voice input is unavailable.')
+        : t('Nenhum microfone disponível.', 'No microphone available.'),
     )
     return { stop: () => {}, live: () => false }
   }
@@ -603,7 +553,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   const Ctor =
     (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
   if (!Ctor) {
-    h.onError('This browser has no speech recognition — use Chrome or Edge, or add an ElevenLabs key.')
+    h.onError(t('Este navegador não tem reconhecimento de voz — use o Chrome ou o Edge, ou adicione uma chave da ElevenLabs.', 'This browser has no speech recognition — use Chrome or Edge, or add an ElevenLabs key.'))
     return { stop: () => {}, live: () => false }
   }
 
@@ -760,7 +710,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     rec = new Ctor()
     rec.continuous = true
     rec.interimResults = true
-    rec.lang = 'en-GB'
+    rec.lang = LANG
     rec.onstart = () => {
       running = true
       diag.running = true
@@ -773,7 +723,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
         stopped = true
         diag.running = false
-        h.onError('Microphone access was refused — voice input is unavailable.')
+        h.onError(t('O acesso ao microfone foi recusado — a entrada de voz não está disponível.', 'Microphone access was refused — voice input is unavailable.'))
       }
     }
     rec.onend = () => {

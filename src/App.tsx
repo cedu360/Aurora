@@ -25,6 +25,7 @@ import {
   watchCapture,
   watchUi,
   watchConnection,
+  bridgeRemembers,
   connectedLabels,
   usingBridge,
   type Msg,
@@ -32,6 +33,7 @@ import {
 import { startAnalyser, micLevel } from './lib/audio'
 import { probeCapabilities } from './lib/capabilities'
 import { env } from './config'
+import { BARE_NAME, LEADING_NAME, t as tr } from './lib/lang'
 
 /**
  * The conversation.
@@ -61,13 +63,8 @@ const newId = () =>
   globalThis.crypto?.randomUUID?.() ??
   `id${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
 
-/** The same mishearings voice.ts accepts for the wake word — otherwise a turn
- *  that woke him as "travis" gets that word sent on to the model as a question. */
-const NAME = '(?:jarvis|jarvys|jervis|travis|jarviss|java\'s|jarv)'
-/** A bare vocative — "Jarvis", "hey jarvis" — with nothing asked. */
-const BARE_NAME = new RegExp(`^(?:hey|hi|ok|okay|yo)?\\s*${NAME}[\\s,.!?]*$`, 'i')
-/** A leading vocative on a real command: "Jarvis, what's the weather". */
-const LEADING_NAME = new RegExp(`^(?:hey|hi|ok|okay|yo)?\\s*${NAME}\\b[\\s,.:!?-]*`, 'i')
+// BARE_NAME and LEADING_NAME — his name used as a vocative, in English or
+// Portuguese, with the recogniser's usual mishearings — come from lang.ts.
 
 export default function App() {
   const store = useStore
@@ -203,7 +200,7 @@ export default function App() {
       sfx.play('error')
       store
         .getState()
-        .setError(err instanceof Error ? err.message : 'Something went wrong.')
+        .setError(err instanceof Error ? err.message : tr('Algo deu errado.', 'Something went wrong.'))
     } finally {
       if (!stale()) {
         speaker.current = null
@@ -340,8 +337,8 @@ export default function App() {
         .getState()
         .setError(
           err instanceof Error
-            ? `Power-up failed: ${err.message}`
-            : 'Power-up failed. Click to try again.',
+            ? tr(`A inicialização falhou: ${err.message}`, `Power-up failed: ${err.message}`)
+            : tr('A inicialização falhou. Clique para tentar de novo.', 'Power-up failed. Click to try again.'),
         )
     }
   }
@@ -389,10 +386,14 @@ export default function App() {
       if (req.mode === 'watch' && req.when === 'past' && camera.bufferedSeconds() < 1) {
         store.getState().setLooking(null)
         return {
-          error:
+          error: tr(
+            'Não há imagens recentes — a câmera precisa estar aberta na tela ' +
+              'para eu lembrar do que acabou de acontecer. Peça para eu abrir a ' +
+              'câmera, e eu passo a observar a partir daí.',
             'There is no recent footage — the camera has to be open on screen ' +
-            'for me to remember what just happened. Ask me to open the camera, ' +
-            'and I can watch from then on.',
+              'for me to remember what just happened. Ask me to open the camera, ' +
+              'and I can watch from then on.',
+          ),
         }
       }
 
@@ -405,15 +406,15 @@ export default function App() {
         if (req.mode === 'look') return camera.grabFrame()
         if (req.when === 'past') {
           const grid = camera.recentGrid(req.seconds, 9)
-          return grid ?? { error: 'There is not enough recent footage to review.' }
+          return grid ?? { error: tr('Não há imagens recentes suficientes para rever.', 'There is not enough recent footage to review.') }
         }
         return await camera.watchAhead(req.seconds, 9)
       } catch (err) {
         return {
           error:
             (err as DOMException)?.name === 'NotAllowedError'
-              ? 'The camera is not permitted, so I cannot see anything.'
-              : `The camera could not be read: ${(err as Error)?.message ?? err}`,
+              ? tr('A câmera não está autorizada, então não consigo ver nada.', 'The camera is not permitted, so I cannot see anything.')
+              : tr(`Não consegui ler a câmera: ${(err as Error)?.message ?? err}`, `The camera could not be read: ${(err as Error)?.message ?? err}`),
         }
       } finally {
         if (held) camera.releaseCamera()
@@ -454,18 +455,31 @@ export default function App() {
     // on screen still shows it. Better to say so than to let him quietly forget.
     watchConnection((state) => {
       if (state === 'lost') {
-        store.getState().setError('Bridge connection lost — reconnecting.')
+        store.getState().setError(tr('Conexão com a ponte perdida — reconectando.', 'Bridge connection lost — reconnecting.'))
       } else if (state === 'reconnected') {
         store
           .getState()
-          .setError('Bridge reconnected. The previous conversation was not kept.')
+          .setError(
+            bridgeRemembers()
+              ? tr(
+                  'Ponte reconectada. As anotações e as últimas conversas continuam na memória em disco.',
+                  'Bridge reconnected. Notes and recent exchanges were kept on disk.',
+                )
+              : tr(
+                  'Ponte reconectada. A conversa anterior não foi mantida.',
+                  'Bridge reconnected. The previous conversation was not kept.',
+                ),
+          )
       }
     })
     const warming = warm().catch((err: Error) => s.setError(err.message))
 
     if (!usingBridge && !env.anthropicKey) {
       s.setError(
-        'No Anthropic API key — copy .env.example to .env.local and set VITE_ANTHROPIC_API_KEY.',
+        tr(
+          'Sem chave da Anthropic — copie .env.example para .env.local e preencha VITE_ANTHROPIC_API_KEY.',
+          'No Anthropic API key — copy .env.example to .env.local and set VITE_ANTHROPIC_API_KEY.',
+        ),
       )
     }
 
@@ -596,7 +610,12 @@ export default function App() {
         silence()
         const demo = createSpeaker()
         speaker.current = demo
-        demo.say(`Voice set to ${name.replace(/\(.*?\)/g, '').trim()}. At your service, sir.`)
+        demo.say(
+          tr(
+            `Voz alterada para ${name.replace(/\(.*?\)/g, '').trim()}. Às suas ordens, senhor.`,
+            `Voice set to ${name.replace(/\(.*?\)/g, '').trim()}. At your service, sir.`,
+          ),
+        )
         void demo.end()
         return
       }
@@ -621,8 +640,8 @@ export default function App() {
                 .getState()
                 .setError(
                   err?.name === 'NotAllowedError'
-                    ? 'Camera access denied — gesture control is unavailable.'
-                    : `Gesture control failed to start: ${err?.message ?? err}`,
+                    ? tr('Acesso à câmera negado — o controle por gestos não está disponível.', 'Camera access denied — gesture control is unavailable.')
+                    : tr(`O controle por gestos não iniciou: ${err?.message ?? err}`, `Gesture control failed to start: ${err?.message ?? err}`),
                 )
             })
         }
@@ -638,7 +657,7 @@ export default function App() {
         silence()
         const t = createSpeaker()
         speaker.current = t
-        t.say('Audio test. If you can hear this, speech output is working, sir.')
+        t.say(tr('Teste de áudio. Se o senhor está ouvindo isto, a saída de voz está funcionando.', 'Audio test. If you can hear this, speech output is working, sir.'))
         void t.end().then(() => {
           const d = (window as unknown as Record<string, Record<string, unknown>>).__tts
           console.info('[jarvis] audio test →', d)

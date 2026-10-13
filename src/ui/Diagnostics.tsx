@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store'
+import { t as tr } from '../lib/lang'
 
 /**
  * The "why can't he hear me / why can't I hear him" panel.
@@ -44,7 +45,8 @@ type TtsDiag = {
   lastText: string
 }
 
-const ago = (t: number) => (t ? `${((Date.now() - t) / 1000).toFixed(1)}s ago` : '—')
+const ago = (t: number) =>
+  t ? tr(`há ${((Date.now() - t) / 1000).toFixed(1)}s`, `${((Date.now() - t) / 1000).toFixed(1)}s ago`) : '—'
 
 function Row({ k, v, bad }: { k: string; v: string; bad?: boolean }) {
   return (
@@ -92,41 +94,41 @@ export function Diagnostics() {
 
   return (
     <div className="diag" aria-live="polite">
-      <div className="diag-head">DIAGNOSTICS · D to close</div>
+      <div className="diag-head">{tr('DIAGNÓSTICO · D para fechar', 'DIAGNOSTICS · D to close')}</div>
 
       <div className="diag-verdict">
         <span className={earsOk ? 'diag-ok' : 'diag-bad'}>
-          {earsOk ? '● hearing you' : '● not hearing you'}
+          {earsOk ? tr('● ouvindo você', '● hearing you') : tr('● não estou ouvindo você', '● not hearing you')}
         </span>
         <span className={mouthOk ? 'diag-ok' : 'diag-bad'}>
-          {mouthOk ? '● speaking' : '● no sound produced'}
+          {mouthOk ? tr('● falando', '● speaking') : tr('● nenhum som produzido', '● no sound produced')}
         </span>
       </div>
 
-      <div className="diag-sec">LISTENING</div>
-      <Row k="recogniser" v={v.running ? 'running' : 'STOPPED'} bad={!v.running} />
-      <Row k="sessions" v={String(v.sessions ?? 0)} />
+      <div className="diag-sec">{tr('ESCUTA', 'LISTENING')}</div>
+      <Row k={tr('reconhecedor', 'recogniser')} v={v.running ? tr('rodando', 'running') : tr('PARADO', 'STOPPED')} bad={!v.running} />
+      <Row k={tr('sessões', 'sessions')} v={String(v.sessions ?? 0)} />
       <Row
-        k="silent for"
+        k={tr('em silêncio há', 'silent for')}
         v={`${((v.idleMs ?? 0) / 1000).toFixed(1)}s`}
         bad={(v.idleMs ?? 0) > 15000}
       />
-      <Row k="forced restarts" v={String(v.restarts ?? 0)} bad={(v.restarts ?? 0) > 0} />
-      <Row k="mode" v={`${v.mode ?? '—'} (phase ${phase})`} />
-      <Row k="accepted" v={String(v.accepted ?? 0)} bad={(v.accepted ?? 0) === 0} />
-      <Row k="wakes" v={String(v.wakes ?? 0)} />
-      <Row k="last heard" v={v.heard ? `"${v.heard}" ${ago(v.heardAt ?? 0)}` : '— nothing yet'} bad={!v.heard} />
-      <Row k="last drop" v={v.dropped || '—'} bad={Boolean(v.dropped)} />
-      <Row k="error" v={v.lastError || '—'} bad={Boolean(v.lastError)} />
+      <Row k={tr('reinícios forçados', 'forced restarts')} v={String(v.restarts ?? 0)} bad={(v.restarts ?? 0) > 0} />
+      <Row k={tr('modo', 'mode')} v={`${v.mode ?? '—'} (${tr('fase', 'phase')} ${phase})`} />
+      <Row k={tr('aceitas', 'accepted')} v={String(v.accepted ?? 0)} bad={(v.accepted ?? 0) === 0} />
+      <Row k={tr('chamadas', 'wakes')} v={String(v.wakes ?? 0)} />
+      <Row k={tr('última fala', 'last heard')} v={v.heard ? `"${v.heard}" ${ago(v.heardAt ?? 0)}` : tr('— nada ainda', '— nothing yet')} bad={!v.heard} />
+      <Row k={tr('último descarte', 'last drop')} v={v.dropped || '—'} bad={Boolean(v.dropped)} />
+      <Row k={tr('erro', 'error')} v={v.lastError || '—'} bad={Boolean(v.lastError)} />
 
-      <div className="diag-sec">SPEAKING · press T to test</div>
-      <Row k="engine" v={String(t.engine ?? 'system')} />
-      <Row k="voice" v={String(t.voice || '—')} />
-      <Row k="handed to OS" v={String(t.spoken ?? 0)} />
-      <Row k="actually spoke" v={String(t.started ?? 0)} bad={(t.started ?? 0) === 0} />
-      <Row k="failures" v={String(t.failures ?? 0)} bad={(t.failures ?? 0) > 0} />
-      <Row k="cloud rescues" v={String(t.rescued ?? 0)} />
-      <Row k="error" v={t.lastError || '—'} bad={Boolean(t.lastError)} />
+      <div className="diag-sec">{tr('FALA · aperte T para testar', 'SPEAKING · press T to test')}</div>
+      <Row k={tr('motor', 'engine')} v={String(t.engine ?? 'system')} />
+      <Row k={tr('voz', 'voice')} v={String(t.voice || '—')} />
+      <Row k={tr('enviadas ao sistema', 'handed to OS')} v={String(t.spoken ?? 0)} />
+      <Row k={tr('faladas de fato', 'actually spoke')} v={String(t.started ?? 0)} bad={(t.started ?? 0) === 0} />
+      <Row k={tr('falhas', 'failures')} v={String(t.failures ?? 0)} bad={(t.failures ?? 0) > 0} />
+      <Row k={tr('resgates na nuvem', 'cloud rescues')} v={String(t.rescued ?? 0)} />
+      <Row k={tr('erro', 'error')} v={t.lastError || '—'} bad={Boolean(t.lastError)} />
     </div>
   )
 }
