@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useStore } from '../store'
+import { isPt } from '../lib/lang'
 
 /**
  * The start-up sequence, rebuilt to the Iron Man boot it is quoting.
@@ -23,14 +24,23 @@ import { useStore } from '../store'
  *  overlay dissolves; App owns the actual hand-off, this is only for pacing. */
 const T = { rings: 2600, suit: 5200, reactor: 7200 }
 
-const LOG = [
-  'MOUNT F:/BACKUP/GHOST (HIDDEN)',
-  'EXTEND SYSTEM MEMORY .......... OK',
-  'TELEMETRY / COMP CLIMATION',
-  'REMOVE SYSTEM CONFIGURATION',
-  'CHECKSUM ...................... OK',
-  'RUN SYSTEM TOOL',
-]
+const LOG = isPt
+  ? [
+      'MONTAR D:/MEMORIA + E:/ESPELHO',
+      'ESTENDER MEMÓRIA DO SISTEMA ...... OK',
+      'TELEMETRIA / CALIBRAR SENSORES',
+      'CARREGAR CONFIGURAÇÃO DO SISTEMA',
+      'VERIFICAÇÃO ...................... OK',
+      'EXECUTAR FERRAMENTAS',
+    ]
+  : [
+      'MOUNT F:/BACKUP/GHOST (HIDDEN)',
+      'EXTEND SYSTEM MEMORY .......... OK',
+      'TELEMETRY / COMP CLIMATION',
+      'REMOVE SYSTEM CONFIGURATION',
+      'CHECKSUM ...................... OK',
+      'RUN SYSTEM TOOL',
+    ]
 
 type Stage = 'bar' | 'rings' | 'suit' | 'reactor'
 
@@ -78,7 +88,7 @@ export function Boot() {
         <div className={`boot-bar ${stage !== 'bar' ? 'boot-bar-dim' : ''}`}>
           <div className="boot-bar-frame">
             <span className="boot-bar-title">
-              INITIATING SYSTEM 1<span className="boot-dots">…</span>
+              {isPt ? 'INICIANDO SISTEMA 1' : 'INITIATING SYSTEM 1'}<span className="boot-dots">…</span>
               <span className="boot-cursor" />
             </span>
             <div className="boot-seg">
