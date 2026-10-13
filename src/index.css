@@ -100,16 +100,34 @@ body::after {
   opacity: 0.42;
 }
 
-.status {
+/* The status line, and under it the brain line when the free model is the one
+   answering. A column hugging the right edge, so either line can be the
+   longer without pushing the other off its alignment. */
+.status-block {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 10px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
   /* The header is space-between, so with the wordmark hidden the status line
      would slide to the left edge on its own. Claiming the free space keeps it
      pinned right whether or not the brand is there — and with both present it
      changes nothing, since space-between had already used that space up. */
   margin-left: auto;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+}
+
+/* Brighter than the brand's subtitle: this one is news, not decoration. */
+.status-brain {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: color-mix(in srgb, var(--accent) 80%, white);
+  opacity: 0.85;
 }
 
 .dot {

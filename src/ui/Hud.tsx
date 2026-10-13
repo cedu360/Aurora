@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useStore, accentFor, type Phase } from '../store'
+import { useStore, accentFor, type Brain, type Phase } from '../store'
 import { Suggestions } from './Suggestions'
 import { BladeSweep, Blades } from './Blades'
 import { Effects } from './Effects'
 import { Pointer } from './Pointer'
 import { GestureGuide } from './GestureGuide'
-import { isPt, t as tr } from '../lib/lang'
+import { LANG, isPt, t as tr } from '../lib/lang'
 
 const statusText: Record<Phase, string> = isPt
   ? {
@@ -29,6 +29,28 @@ const statusText: Record<Phase, string> = isPt
       tooling: 'ACCESSING SYSTEMS',
       speaking: 'RESPONDING',
     }
+
+/**
+ * The line under the status while the free brain is answering, in the same
+ * capitals as the rest of the chrome: "CÉREBRO LOCAL · QWEN2.5:7B · ATÉ 19:00".
+ * The time is when Claude is tried again; with a weekday in front when that is
+ * not today, since a weekly limit can be days away.
+ */
+function brainLine(b: Brain): string {
+  const name = (b.base || b.model || '').replace(/:latest$/, '')
+  const until = b.until ? new Date(b.until) : null
+  let at = ''
+  if (until && !Number.isNaN(until.getTime())) {
+    at = until.toLocaleTimeString(LANG, { hour: '2-digit', minute: '2-digit' })
+    if (until.toDateString() !== new Date().toDateString()) {
+      at = `${until.toLocaleDateString(LANG, { weekday: 'short' })} ${at}`
+    }
+  }
+  return [tr('CÉREBRO LOCAL', 'LOCAL BRAIN'), name, at && tr(`ATÉ ${at}`, `UNTIL ${at}`)]
+    .filter(Boolean)
+    .join(' · ')
+    .toUpperCase()
+}
 
 function Corner({ at }: { at: 'tl' | 'tr' | 'bl' | 'br' }) {
   return <div className={`corner corner-${at}`} />
@@ -170,6 +192,7 @@ export function Hud() {
   const bootNote = useStore((s) => s.bootNote)
   const gestures = useStore((s) => s.gestures)
   const looking = useStore((s) => s.looking)
+  const brain = useStore((s) => s.brain)
   const ui = useStore((s) => s.ui)
 
   // accentFor folds AURORA's overrides in over the phase colour, so one
@@ -212,15 +235,20 @@ export function Hud() {
           </div>
         )}
 
-        <div className="status">
-          <span className="dot" />
-          <span className="status-text">
-            {/* bootNote is the voice-model download readout. It is only ever
-                the right thing to show during boot — as a general fallback a
-                note that never got cleared (a stuck 'voice 97%') sits over
-                LISTENING and PROCESSING for the rest of the session. */}
-            {phase === 'boot' && bootNote ? bootNote : statusText[phase]}
-          </span>
+        <div className="status-block">
+          <div className="status">
+            <span className="dot" />
+            <span className="status-text">
+              {/* bootNote is the voice-model download readout. It is only ever
+                  the right thing to show during boot — as a general fallback a
+                  note that never got cleared (a stuck 'voice 97%') sits over
+                  LISTENING and PROCESSING for the rest of the session. */}
+              {phase === 'boot' && bootNote ? bootNote : statusText[phase]}
+            </span>
+          </div>
+          {/* Only while the free model is the one answering. On Claude there
+              is nothing to say, and saying it anyway would be noise. */}
+          {brain?.mode === 'local' && <div className="status-brain">{brainLine(brain)}</div>}
         </div>
       </header>
 
@@ -239,6 +267,13 @@ export function Hud() {
             <span className="tick" />
             Web
           </div>
+          {/* The free model waiting in reserve for when the plan runs out. */}
+          {brain?.reserve && (
+            <div className="rail-item">
+              <span className="tick" />
+              Ollama
+            </div>
+          )}
         </aside>
       )}
 

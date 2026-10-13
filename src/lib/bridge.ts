@@ -1,5 +1,5 @@
 import type { AskHandlers } from './anthropic'
-import type { Blade, Panel } from '../store'
+import type { Blade, Brain, Panel } from '../store'
 import { BRIDGE_WS_URL } from '../config'
 import { t } from './lang'
 
@@ -31,13 +31,18 @@ type Frame = {
   args?: unknown
   id?: string
   ask?: string
-  reason?: string
+  reason?: string | null
   mode?: string
   seconds?: number
   when?: string
   servers?: Array<string | { name?: string }>
   /** Whether the bridge keeps a memory on disk across sessions. */
   memory?: boolean
+  /** `brain` frames: which model is answering, and until when. */
+  model?: string | null
+  base?: string | null
+  until?: string | null
+  reserve?: string | null
 }
 
 /** Every question gets an id so its answer can be told from anyone else's. */
@@ -107,6 +112,30 @@ export function watchBlades(fn: (blade: Blade) => void) {
 let onUi: ((op: string, args: any) => void) | null = null
 export function watchUi(fn: (op: string, args: any) => void) {
   onUi = fn
+}
+
+/**
+ * Which brain is answering. Sent on connect and again whenever it changes —
+ * the plan's limit reached, the limit renewed, Ollama started or stopped — and
+ * kept here so a watcher registered after the first frame still gets it.
+ */
+let brain: Brain | null = null
+let onBrain: ((b: Brain) => void) | null = null
+export function watchBrain(fn: (b: Brain) => void) {
+  onBrain = fn
+  if (brain) fn(brain)
+}
+
+/**
+ * Something the bridge noticed by itself, outside any turn: a file that has
+ * just landed in Downloads. A sentence for her to say, and usually a blade with
+ * the details. Nobody asked, so it arrives on its own channel and the app
+ * decides when it is polite to say it.
+ */
+export type Notice = { text: string; blade?: Blade }
+let onNotice: ((n: Notice) => void) | null = null
+export function watchNotices(fn: (n: Notice) => void) {
+  onNotice = fn
 }
 
 /**
@@ -217,6 +246,18 @@ function dispatch(ws: WebSocket) {
       // A `ui` frame with no args is normal — reset and clear take none — so an
       // absent args object is an empty one, not a reason to drop the command.
       onUi?.(msg.op, (msg.args ?? {}) as Record<string, unknown>)
+    } else if (msg.type === 'brain') {
+      brain = {
+        mode: msg.mode === 'local' ? 'local' : 'claude',
+        model: msg.model ?? null,
+        base: msg.base ?? null,
+        until: msg.until ?? null,
+        reason: msg.reason === 'limit' || msg.reason === 'extra' || msg.reason === 'choice' ? msg.reason : null,
+        reserve: msg.reserve ?? null,
+      }
+      onBrain?.(brain)
+    } else if (msg.type === 'notice' && msg.text) {
+      onNotice?.({ text: msg.text, blade: msg.blade })
     }
   })
 }
@@ -327,9 +368,18 @@ const IDLE_TIMEOUT_MS = 120_000
 /** The turn in flight, so a barge-in can settle it locally. */
 let pending: { finish: (fallback?: string) => void } | null = null
 
+/**
+ * `kind: 'briefing'` is the start-up briefing: the bridge writes the real
+ * question itself, from her notes and what it knows about the plan and the
+ * Downloads folder, and answers with nothing at all when there is nothing
+ * worth saying.
+ */
+export type AskOptions = { kind?: 'briefing' }
+
 export async function ask(
   prompt: string,
   handlers: AskHandlers,
+  { kind }: AskOptions = {},
 ): Promise<{ text: string; tools: string[] }> {
   /**
    * A new question supersedes the one in flight.
@@ -481,7 +531,7 @@ export async function ask(
     arm()
 
     try {
-      ws.send(JSON.stringify({ type: 'ask', text: prompt, id }))
+      ws.send(JSON.stringify({ type: 'ask', text: prompt, id, ...(kind ? { kind } : {}) }))
     } catch (err) {
       // The socket can go into CLOSING between connect() resolving and here.
       fail(err instanceof Error ? err : new Error(String(err)))

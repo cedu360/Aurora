@@ -123,6 +123,32 @@ try {
   // Not installed yet; the line above about npm install covers it.
 }
 
+// --- The free reserve (Ollama) ----------------------------------------------
+// The model she carries on with when the Claude plan's limit is reached.
+try {
+  const { localStatus, unavailableNote } = await import('../bridge/local.mjs');
+  const status = await localStatus({ fresh: true });
+  if (process.env.AURORA_BRAIN === 'claude') {
+    line(info, say('Reserva gratuita desligada (AURORA_BRAIN=claude).', 'Free reserve switched off (AURORA_BRAIN=claude).'));
+  } else if (status.ok) {
+    line(
+      tick,
+      say(
+        `Reserva gratuita pronta: ${status.model} no Ollama ${status.version}. Quando o limite do Claude acabar, ela continua por ele.`,
+        `Free reserve ready: ${status.model} on Ollama ${status.version}. When the Claude limit runs out, she carries on with it.`,
+      ),
+    );
+  } else {
+    const note = unavailableNote(status, PT ? 'pt-BR' : 'en');
+    line(info, say(`Sem reserva gratuita: ${note}.`, `No free reserve: ${note}.`));
+    if (!note.includes('npm run ollama')) {
+      line(info, say('Opcional: npm run ollama prepara o modelo local que assume quando o limite do Claude acaba.', 'Optional: npm run ollama prepares the local model that takes over when the Claude limit runs out.'));
+    }
+  }
+} catch {
+  // Not installed yet; the line above about npm install covers it.
+}
+
 // --- ElevenLabs key (env or the elevenlabs MCP entry) --------------------
 function findElevenLabsKey() {
   if (process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_API_KEY.trim()) {

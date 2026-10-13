@@ -1,6 +1,6 @@
 # AURORA — guia completo
 
-A AURORA é uma assistente de voz com interface holográfica em que o "cérebro" é o Claude Code rodando no seu computador. Ela fala português do Brasil, liga junto com o Windows, guarda memória em disco e analisa programas com o REA. Começou como um fork do [JARVIS do adewaskar](https://github.com/adewaskar/jarvis) (licença MIT).
+A AURORA é uma assistente de voz com interface holográfica em que o "cérebro" é o Claude Code rodando no seu computador. Ela fala português do Brasil, liga junto com o Windows, guarda memória em disco, analisa programas com o REA, vigia a pasta Downloads e, quando o limite do plano do Claude acaba, continua num modelo gratuito que roda no próprio computador. Começou como um fork do [JARVIS do adewaskar](https://github.com/adewaskar/jarvis) (licença MIT).
 
 ## O que precisa ter instalado
 
@@ -17,6 +17,7 @@ A AURORA é uma assistente de voz com interface holográfica em que o "cérebro"
    ```powershell
    npx rea-agents setup
    ```
+6. *(Opcional)* **Ollama**, para ela continuar de graça quando o limite do Claude acabar. Não precisa instalar à mão: o `npm run ollama` faz isso (veja "Reserva gratuita").
 
 ## Instalar
 
@@ -34,7 +35,7 @@ npm install
 npm run setup
 ```
 
-O `setup` não muda nada: só mostra o que está pronto e o que falta (Claude Code, discos, REA, Cápsula, Chrome, início automático).
+O `setup` não muda nada: só mostra o que está pronto e o que falta (Claude Code, discos, REA, Cápsula, Chrome, reserva gratuita, início automático).
 
 ## Como ela liga
 
@@ -49,7 +50,8 @@ Isso cria dois atalhos **Aurora**, com o ícone do reator: um na pasta de inicia
 1. Você entra no Windows.
 2. A ponte e a interface sobem escondidas, sem janela de terminal.
 3. A janela da AURORA abre (Chrome em modo aplicativo, com um perfil só dela), a sequência de inicialização toca e ela diz "Bom dia, senhor. Todos os sistemas prontos."
-4. Diga **"Ei Aurora"** e fale.
+4. Na primeira vez do dia, ela emenda o resumo do que merece atenção (veja "Resumo ao ligar").
+5. Diga **"Ei Aurora"** e fale.
 
 Na primeira vez, a janela pede o microfone: clique em **Permitir**. Ela lembra da permissão nas próximas.
 
@@ -92,6 +94,7 @@ Sem configurar nada além do login do Claude Code:
 - **Ver pela câmera**: "o que você está vendo?", "observe por cinco segundos".
 - **Mudar a própria interface**: cor, forma do reator, imagens em órbita.
 - **Lembrar**: anotações e conversas em disco (veja "Memória").
+- **Resumir o dia ao ligar** e **vigiar a pasta Downloads** (veja as seções com esses nomes).
 - **Ser controlada pelas mãos** pela câmera (tecla G).
 
 Com as extensões opcionais:
@@ -100,6 +103,7 @@ Com as extensões opcionais:
 - **Engenharia reversa** (REA): explicar o que um programa, biblioteca, APK ou site faz por dentro.
 - **Cápsula**: estado do nó, últimos blocos, casos e verificação da cadeia.
 - **Os seus servidores MCP**: tudo o que você já configurou no Claude Code também fica disponível para ela.
+- **Ollama**: um modelo gratuito no seu computador, que assume quando o limite do Claude acaba.
 
 Com `--writes` (veja "Ações"): rodar comandos, criar e apagar arquivos, clicar e digitar no navegador, mexer no celular pelo adb.
 
@@ -170,6 +174,60 @@ Se existir a pasta `C:\Users\<seu usuário>\.capsula`, a AURORA ganha quatro con
 
 Ela **nunca** abre `wallet.seed`, a chave de assinatura, `sign_tokens` nem nada da carteira: só lê uma lista fechada de arquivos (configuração do nó, ledger, pares, índice de casos, preço).
 
+## Reserva gratuita (Ollama)
+
+Quando o limite do seu plano do Claude acaba, a AURORA não para. Ela passa a responder por um modelo de IA gratuito que roda no seu próprio computador, pelo [Ollama](https://ollama.com), e avisa uma vez:
+
+> "Receio que o limite do plano do Claude tenha acabado, senhor. Até as dezenove horas, respondo pelo modelo local, que é gratuito."
+
+Quando o limite renova, ela volta sozinha para o Claude, já sabendo o que foi conversado nesse meio-tempo. Enquanto o modelo local responde, o topo da tela mostra **CÉREBRO LOCAL**, o modelo e até que horas.
+
+Para preparar, uma vez só:
+
+```powershell
+npm run ollama
+```
+
+O comando instala o Ollama pelo winget (se ainda não estiver instalado), baixa o modelo e cria o `aurora-local`, uma cópia dele com espaço para as instruções dela. No fim ele faz uma pergunta de teste e diz quanto tempo levou. O modelo padrão é o `qwen2.5:7b` (uns 5 GB) em computadores com 16 GB de memória ou mais, e o `llama3.2:3b` (uns 2 GB) abaixo disso. Para usar outro: `npm run ollama -- qwen2.5:14b`.
+
+No modelo local ela conversa, pesquisa na web, lê páginas, mostra artigos e imagens na tela, lembra, anota e responde sobre a guarda de downloads e o Cápsula. O REA, o seu Chrome e os comandos ficam para quando o Claude voltar.
+
+- Para usar só o modelo local, sem gastar nada do plano: `AURORA_BRAIN=local` no `.env.local`.
+- Para nunca trocar: `AURORA_BRAIN=claude`.
+- Se o seu plano tem uso extra pago, ela troca antes de começar a cobrar o extra. Para aceitar o extra: `AURORA_EXTRA_USAGE=1`.
+
+O Ollama precisa estar aberto (ele fica ao lado do relógio do Windows e liga sozinho com o computador depois de instalado). A AURORA confere a cada minuto se ele apareceu.
+
+## Resumo ao ligar
+
+Logo depois de ligar, ela diz em até três frases o que merece a sua atenção hoje: compromissos e pendências das anotações, o que ficou em aberto na última conversa e avisos que ela mesma percebeu, como o limite do plano passando de 75% ou um programa que chegou em Downloads enquanto ela estava desligada.
+
+O resumo completo é só na primeira vez do dia. Nas outras, ela só fala se tiver um aviso novo. Depois do resumo o microfone fica aberto por alguns segundos, então dá para responder direto, sem dizer "Ei Aurora". Falar por cima interrompe o resumo, como qualquer resposta. O relatório de um arquivo que chegou em Downloads fica na tela mesmo assim, e se você falar antes de o resumo começar, ela dá o aviso da guarda quando a conversa terminar.
+
+## Guarda de downloads
+
+Toda vez que chega na pasta Downloads um programa, instalador, script, APK, imagem de disco ou arquivo compactado com programa dentro, ela examina na hora e avisa em voz, com os detalhes num painel:
+
+- "Senhor, chegou em Downloads o instalador node v22.12.0 x64, assinado por OpenJS Foundation, vindo de nodejs.org."
+- "Senhor, chegou em Downloads o programa driver impressora, sem assinatura digital, vindo de drivers-gratis.net."
+- "Senhor, o programa fatura.pdf chegou em Downloads com extensão dupla, vindo de boletos-online.xyz. Melhor não abrir antes de examinar."
+
+O que ela confere, só lendo o arquivo:
+
+- de que site ele veio (a marca que o navegador grava no arquivo);
+- quem assinou e se a assinatura é válida;
+- disfarces: extensão dupla (`fatura.pdf.exe`) e nome invertido por um caractere oculto;
+- o cabeçalho do programa: 32 ou 64 bits, data de compilação, .NET, compactação UPX, conteúdo embaralhado, instaladores conhecidos;
+- dentro de .zip, .jar e .apk: se há programas escondidos e se tem senha;
+- com uma chave do VirusTotal em `AURORA_VIRUSTOTAL_KEY`, quantos antivírus já marcaram aquele arquivo. Só o hash é enviado, nunca o arquivo.
+
+Depois é só perguntar: "Ei Aurora, o que esse programa faz?" Com o REA instalado, ela abre o programa por dentro e explica.
+
+- Arquivos compactados sem nenhum programa dentro só ficam registrados, sem aviso.
+- Se a janela estiver fechada, ou se o arquivo chegou com ela desligada, o aviso entra no próximo resumo ao ligar.
+- Ela nunca abre, executa, move ou apaga nada, e não examina arquivos das pastas `.capsula` e `.ssh` nem com nome de chave ou carteira.
+- Para desligar a guarda: `AURORA_DOWNLOADS=off`. Na primeira vez ela só anota o que já está na pasta, sem avisar nada.
+
 ## Configuração (`.env.local`)
 
 Copie `.env.example` para `.env.local` e descomente só o que quiser mudar. A ponte, a página e o lançador leem o mesmo arquivo.
@@ -187,6 +245,11 @@ Copie `.env.example` para `.env.local` e descomente só o que quiser mudar. A po
 | `AURORA_MODEL` | `claude-opus-5` | modelo; um modelo Sonnet responde mais rápido |
 | `ELEVENLABS_API_KEY` | — | voz e transcrição melhores |
 | `AURORA_VOICE_ID` | Alice | voz da ElevenLabs |
+| `AURORA_BRAIN` | `auto` | `local` usa só o modelo gratuito; `claude` nunca troca |
+| `AURORA_OLLAMA_MODEL` | `aurora-local` | o modelo do Ollama que ela usa |
+| `AURORA_EXTRA_USAGE` | desligado | `1` aceita o uso extra pago antes de trocar |
+| `AURORA_DOWNLOADS` | a pasta Downloads | a pasta vigiada; `off` desliga a guarda |
+| `AURORA_VIRUSTOTAL_KEY` | — | consulta o hash dos downloads no VirusTotal |
 
 ## Problemas comuns
 
@@ -197,7 +260,10 @@ Copie `.env.example` para `.env.local` e descomente só o que quiser mudar. A po
 - **Ela fala com sotaque inglês**: instale a voz Português (Brasil) do Windows (veja "A voz").
 - **Ela não entende "Ei Aurora"**: também dá para apertar Espaço e falar direto.
 - **O REA demora na primeira vez**: o `npx` baixa o REA na primeira chamada.
+- **"O limite do plano do Claude acabou, e não há modelo local"**: rode `npm run ollama` e deixe o Ollama aberto.
+- **O modelo local está lento**: a primeira pergunta carrega o modelo na memória e demora mais. Se continuar lento, use um menor: `npm run ollama -- llama3.2:3b`.
+- **A guarda de downloads não avisa nada**: na primeira vez ela só anota o que já está na pasta. Confira no `aurora.log` a linha "guarda de downloads vigiando" e a pasta que ela está olhando.
 
 ## Créditos
 
-Baseada no [JARVIS do Aditya Dewaskar](https://github.com/adewaskar/jarvis), licença MIT (arquivo `LICENSE`), que fez a interface, a ponte com o Claude Code e o laço de voz. Esta versão mantém a mesma licença. Música de Kevin MacLeod, CC BY 4.0 ([créditos](public/audio/CREDITS.md)). Engenharia reversa pelo [REA](https://github.com/morluto/rea).
+Baseada no [JARVIS do Aditya Dewaskar](https://github.com/adewaskar/jarvis), licença MIT (arquivo `LICENSE`), que fez a interface, a ponte com o Claude Code e o laço de voz. Esta versão mantém a mesma licença. O modelo gratuito roda pelo [Ollama](https://ollama.com). Música de Kevin MacLeod, CC BY 4.0 ([créditos](public/audio/CREDITS.md)). Engenharia reversa pelo [REA](https://github.com/morluto/rea).
