@@ -52,6 +52,26 @@ export type Blade = {
   hold: 'turn' | 'sticky'
 }
 
+/**
+ * Which brain is answering, as the bridge reports it.
+ *
+ * Normally Claude. When the plan's limit is reached the bridge hands the
+ * questions to a free model running on this computer through Ollama, and goes
+ * back by itself when the limit resets; the HUD says so while it lasts.
+ */
+export type Brain = {
+  mode: 'claude' | 'local'
+  /** The model answering, and for a local one what it was built from. */
+  model: string | null
+  base: string | null
+  /** When Claude is tried again (ISO time), or null when nothing is waiting. */
+  until: string | null
+  /** Why the local one is answering: a limit, paid extra usage avoided, or his choice. */
+  reason: 'limit' | 'extra' | 'choice' | null
+  /** The free model standing by, or null when Ollama has none. */
+  reserve: string | null
+}
+
 export type Turn = {
   id: string
   role: 'user' | 'aurora'
@@ -230,6 +250,8 @@ type State = {
   looking: string | null
   /** Transient status line during boot, e.g. the voice model download. */
   bootNote: string
+  /** Which brain is answering. null on the direct path, which has only one. */
+  brain: Brain | null
   /** Cards currently on the display, newest last. */
   panels: Panel[]
   /** Blades currently open, newest last — which is also front-most. */
@@ -245,6 +267,7 @@ type State = {
   setGestures: (on: boolean) => void
   setLooking: (why: string | null) => void
   setBootNote: (n: string) => void
+  setBrain: (b: Brain) => void
   pushPanel: (p: Panel) => void
   clearPanels: () => void
   pushBlade: (b: Blade) => void
@@ -286,12 +309,14 @@ export const useStore = create<State>((set) => ({
   focusedBlade: null,
   expandedBlade: null,
   bootNote: '',
+  brain: null,
   ui: defaultUi(),
 
   setVoice: (voice) => set({ voice }),
   setGestures: (gestures) => set({ gestures }),
   setLooking: (looking) => set({ looking }),
   setBootNote: (bootNote) => set({ bootNote }),
+  setBrain: (brain) => set({ brain }),
   // Three is as many as fits around the reactor without crowding it. Sticky
   // panels are exempt from the cull — the tool description promises they stay
   // until replaced, and a plain slice(-3) silently evicted them the moment a

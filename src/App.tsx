@@ -25,10 +25,13 @@ import {
   watchCapture,
   watchUi,
   watchConnection,
+  watchBrain,
+  watchNotices,
   bridgeRemembers,
   connectedLabels,
   usingBridge,
   type Msg,
+  type Notice,
 } from './lib/brain'
 import { startAnalyser, micLevel } from './lib/audio'
 import { probeCapabilities } from './lib/capabilities'
@@ -90,6 +93,9 @@ export default function App() {
    */
   const turn = useRef(0)
   const booting = useRef(false)
+  /** News the bridge volunteered, waiting for standby to be said. */
+  const notices = useRef<Notice[]>([])
+  const sayingNotice = useRef(false)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const voicePoll = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -225,6 +231,104 @@ export default function App() {
     }
   }
 
+  // -- things nobody asked for ----------------------------------------------
+
+  /**
+   * The start-up briefing: what deserves his attention today, said once after
+   * power-on — appointments and open items from her notes, the plan nearly
+   * spent, a file that reached Downloads while she was off.
+   *
+   * The bridge writes the question and decides whether anything is worth
+   * saying; after the first start of a quiet day it answers with nothing and
+   * she goes straight to standby. When there is something, it is a turn like
+   * any other: he can talk over it, and the microphone stays open afterwards in
+   * case he wants to answer it. `spk` may already hold the greeting, which is
+   * said first.
+   */
+  const brief = async (spk: ReturnType<typeof createSpeaker>): Promise<void> => {
+    const mine = ++turn.current
+    const stale = () => mine !== turn.current
+    speaker.current = spk
+    store.getState().setPhase('thinking')
+    let started = false
+
+    try {
+      await ask(
+        tr('(resumo ao ligar)', '(start-up briefing)'),
+        [],
+        {
+          onText: (delta) => {
+            if (stale()) return
+            if (!started) {
+              started = true
+              store.getState().setPhase('speaking')
+              store.getState().pushTurn({ id: newId(), role: 'aurora', text: '' })
+              sfx.duck(true)
+              music.duck(true)
+            }
+            store.getState().appendToLastTurn(delta)
+            spk.push(delta)
+          },
+          // Her notes are already in her prompt, so a briefing has no reason to
+          // reach for a tool, and no reason to announce one with a filler line.
+          onTool: () => {},
+        },
+        { kind: 'briefing' },
+      )
+    } catch (err) {
+      // Not worth an error on screen: she is up and listening, which is what
+      // matters, and a bridge that is down has already said so.
+      if (!stale()) console.warn('[aurora] start-up briefing:', err)
+    }
+    if (stale()) return
+    await spk.end()
+    if (stale()) return
+    speaker.current = null
+    sfx.duck(false)
+    music.duck(false)
+    if (started) listen(FOLLOW_UP_MS)
+    else store.getState().setPhase('dormant')
+  }
+
+  /**
+   * Says what the bridge noticed by itself — a file landing in Downloads —
+   * when there is a quiet moment for it.
+   *
+   * Only in standby. Breaking into an answer, or into him talking, with news
+   * he did not ask for would be rude, so anything that arrives mid-conversation
+   * waits until she is idle again (the phase effect below calls this). Whatever
+   * she is already saying in standby, the greeting or a voice sample, finishes
+   * first. The blade goes up and the line goes into the transcript as she says
+   * it, so the news is still on screen for someone who was out of the room.
+   */
+  const sayNotices = async (): Promise<void> => {
+    if (sayingNotice.current) return
+    sayingNotice.current = true
+    try {
+      while (notices.current.length && store.getState().phase === 'dormant') {
+        await speaker.current?.end()
+        if (store.getState().phase !== 'dormant') break
+        const next = notices.current.shift()
+        if (!next) break
+        const s = store.getState()
+        if (next.blade) s.pushBlade(next.blade)
+        s.pushTurn({ id: newId(), role: 'aurora', text: next.text })
+        const spk = createSpeaker()
+        speaker.current = spk
+        spk.say(next.text)
+        await spk.end()
+        if (speaker.current === spk) speaker.current = null
+      }
+    } finally {
+      sayingNotice.current = false
+    }
+  }
+
+  useEffect(() => {
+    if (phase === 'dormant') void sayNotices()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
   // -- voice events ---------------------------------------------------------
 
   /** What the voice loop should do with what it hears, derived from phase. */
@@ -247,6 +351,9 @@ export default function App() {
     const phase = store.getState().phase
     if (phase === 'offline' || phase === 'boot') return
 
+    // Whatever she was saying in standby — the greeting, a notice about a
+    // download — stops for her name, as an answer would.
+    silence()
     store.getState().setError(null)
     sfx.play('wake')
 
@@ -372,6 +479,11 @@ export default function App() {
     watchServers((servers) => store.getState().setConnected(servers))
     watchPanels((panel) => store.getState().pushPanel(panel))
     watchBlades((blade) => store.getState().pushBlade(blade))
+    watchBrain((brain) => store.getState().setBrain(brain))
+    watchNotices((notice) => {
+      notices.current.push(notice)
+      void sayNotices()
+    })
 
     /**
      * AURORA asking to see something.
@@ -553,11 +665,17 @@ export default function App() {
 
     // Switched on by the launcher rather than by a hand, so nobody may be
     // looking at the screen yet. A line of speech is how they learn he is up.
-    if (auto) {
-      const hello = createSpeaker()
-      speaker.current = hello
-      hello.say(greeting())
-      void hello.end()
+    // Then, through the bridge, the briefing, on the same voice so the two
+    // never talk over each other.
+    const hello = createSpeaker()
+    speaker.current = hello
+    if (auto) hello.say(greeting())
+    if (usingBridge) {
+      void brief(hello)
+    } else {
+      void hello.end().then(() => {
+        if (speaker.current === hello) speaker.current = null
+      })
     }
   }
 

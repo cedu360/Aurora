@@ -2,10 +2,10 @@ import { BACKEND } from '../config'
 import * as direct from './anthropic'
 import * as bridge from './bridge'
 import type { AskHandlers, Msg } from './anthropic'
-import type { Blade, Panel } from '../store'
+import type { Blade, Brain, Panel } from '../store'
 
 export type { AskHandlers, Msg }
-export type { ConnectionState } from './bridge'
+export type { AskOptions, ConnectionState, Notice } from './bridge'
 
 /**
  * Picks the brain. Both backends answer a question and stream text and tool
@@ -23,14 +23,16 @@ export type { ConnectionState } from './bridge'
 export const usingBridge = BACKEND === 'bridge'
 
 /** Conversation state lives in the bridge session, so history is only threaded
- *  through on the direct path. */
+ *  through on the direct path. So are the options: the start-up briefing is
+ *  written by the bridge, and the direct path has nobody to write it. */
 export async function ask(
   prompt: string,
   history: Msg[],
   handlers: AskHandlers,
+  options: bridge.AskOptions = {},
 ): Promise<{ text: string; tools: string[] }> {
   return usingBridge
-    ? bridge.ask(prompt, handlers)
+    ? bridge.ask(prompt, handlers, options)
     : direct.ask([...history, { role: 'user', content: prompt }], handlers)
 }
 
@@ -67,6 +69,20 @@ export function watchBlades(fn: (blade: Blade) => void): void {
  */
 export function watchUi(fn: (op: string, args: any) => void): void {
   if (usingBridge) bridge.watchUi(fn)
+}
+
+/**
+ * Which brain is answering: Claude, or the free model the bridge falls back to
+ * through Ollama when the plan's limit is reached. Only the bridge can switch,
+ * so on the direct path this never fires.
+ */
+export function watchBrain(fn: (brain: Brain) => void): void {
+  if (usingBridge) bridge.watchBrain(fn)
+}
+
+/** Things the bridge noticed by itself, such as a new file in Downloads. */
+export function watchNotices(fn: (notice: bridge.Notice) => void): void {
+  if (usingBridge) bridge.watchNotices(fn)
 }
 
 /**

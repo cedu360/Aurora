@@ -317,7 +317,7 @@ argument. You know those things. Overrule it whenever you have reason to.`
  * @param {(panel: object) => void} emit - pushes the panel to the browser
  * @param {(blade: object) => void} emitBlade - pushes a blade to the browser
  */
-export function displayServer(emit, emitBlade) {
+export function displayServer(emit, emitBlade, { only } = {}) {
   return createSdkMcpServer({
     name: 'aurora',
     version: '1.0.0',
@@ -327,7 +327,9 @@ export function displayServer(emit, emitBlade) {
     // Never defer this behind tool search — if the model has to go looking for
     // it, it won't occur to it to show anything.
     alwaysLoad: true,
-    tools: [
+    // `only` narrows the kit for a brain that should not have all of it: the
+    // free local model gets `blade` and is spared composing its own markup.
+    tools: pick([
       tool('display', DESCRIPTION, schema, async (args) => {
         // Refuse rather than warn. Emitting anyway put a blank card on screen
         // and told the model nothing, so it had no reason to try again; handed
@@ -422,8 +424,11 @@ export function displayServer(emit, emitBlade) {
           return { content: [{ type: 'text', text: JSON.stringify(report, null, 1) }] }
         },
       ),
-    ],
+    ], only),
   })
 }
+
+/** The named tools only, or all of them. */
+const pick = (tools, only) => (only ? tools.filter((t) => only.includes(t.name)) : tools)
 
 const refuse = (text) => ({ isError: true, content: [{ type: 'text', text }] })

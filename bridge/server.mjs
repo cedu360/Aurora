@@ -23,11 +23,26 @@ import { chromeAvailable, chromeServer } from './chrome.mjs'
 import { visionServer } from './vision.mjs'
 import { createMemory, memoryPlaces } from './memory.mjs'
 import { capsulaDir, capsulaServer } from './capsula.mjs'
+import { announce, createGuard, downloadsDir, downloadsServer, reportHtml } from './downloads.mjs'
 import { loadLocalEnv } from './env.mjs'
+import {
+  OLLAMA_URL,
+  limitSignal,
+  localEnv,
+  localPrompt,
+  localStatus,
+  nowTag,
+  retryAt,
+  switchNotice,
+  unavailableNote,
+  untilSpoken,
+  webServer,
+  whenShown,
+} from './local.mjs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
-import { readFile, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
+import { mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises'
+import { dirname, isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
 import { openRemote, proxyError, vetTarget, PROXY_UA } from './net.mjs'
 import { probeUrl, renderPage } from './page.mjs'
 
@@ -154,6 +169,97 @@ const MODEL = process.env.AURORA_MODEL ?? 'claude-opus-5'
  * dead air shows.
  */
 const EFFORT = process.env.AURORA_EFFORT ?? 'high'
+
+/**
+ * Which brain answers.
+ *
+ *   auto   — Claude, until the plan's limit is reached; then the free local
+ *            model until it resets (see bridge/local.mjs). The default.
+ *   claude — Claude only. A limit is a limit.
+ *   local  — the local model only, so not one paid token is spent.
+ *
+ * Kept for the whole process rather than per window, because the limit belongs
+ * to the account: two windows are not two allowances.
+ */
+const BRAIN = ['claude', 'local'].includes(process.env.AURORA_BRAIN) ? process.env.AURORA_BRAIN : 'auto'
+
+/**
+ * The plan's state as last reported. `until` is when Claude is tried again;
+ * `episode` counts limits reached, so each window says the switch out loud once
+ * per limit rather than once per question; `info` is the latest usage report,
+ * which the start-up briefing reads.
+ */
+const limit = { until: 0, reason: null, info: null, episode: 0, timer: null }
+
+/** Every open window, for news that is not part of anybody's turn. */
+const sockets = new Set()
+function broadcast(frame) {
+  const text = JSON.stringify(frame)
+  for (const s of sockets) if (s.readyState === s.OPEN) s.send(text)
+}
+
+/**
+ * The free brain as last probed. Refreshed every minute in the background, so
+ * the moment a limit is hit the decision to switch never waits on a network
+ * call — and a window learns within the minute that Ollama has appeared.
+ */
+let local = { ok: false, reason: 'offline' }
+async function refreshLocal() {
+  const was = local.ok
+  local = await localStatus({ fresh: true })
+  if (local.ok !== was) broadcast(brainFrame())
+  return local
+}
+
+/** Is the free brain the one answering right now? */
+const onLocal = () => BRAIN === 'local' || (BRAIN === 'auto' && Date.now() < limit.until && local.ok)
+
+/**
+ * For the HUD: which brain is answering, which model (and for the local one,
+ * what it was built from), until when, why, and the free model standing by.
+ */
+function brainFrame() {
+  const free = onLocal()
+  return {
+    type: 'brain',
+    mode: free ? 'local' : 'claude',
+    model: free ? (local.model ?? null) : MODEL,
+    base: free ? (local.base ?? null) : null,
+    until: free && BRAIN === 'auto' ? new Date(limit.until).toISOString() : null,
+    reason: free ? (BRAIN === 'local' ? 'choice' : limit.reason) : null,
+    reserve: local.ok ? local.model : null,
+  }
+}
+
+/** Claude has said its limit is reached: note until when, and tell every window. */
+function reachLimit(signal) {
+  const fresh = Date.now() >= limit.until
+  limit.until = retryAt(signal)
+  limit.reason = signal.reason
+  if (fresh) {
+    limit.episode += 1
+    const at = new Date(limit.until).toLocaleTimeString(LANG, { hour: '2-digit', minute: '2-digit' })
+    const what =
+      signal.reason === 'extra'
+        ? say('o plano do Claude acabou e o próximo passo seria uso extra pago', 'the Claude plan is spent and paid extra usage would be next')
+        : say('limite do Claude atingido', 'Claude limit reached')
+    console.log(
+      local.ok
+        ? say(`[aurora] ${what}: modelo local ${local.model} até ${at}`, `[aurora] ${what}: local model ${local.model} until ${at}`)
+        : say(`[aurora] ${what}, e sem modelo local: ${unavailableNote(local, LANG)}`, `[aurora] ${what}, and no local model: ${unavailableNote(local, LANG)}`),
+    )
+  }
+  clearTimeout(limit.timer)
+  limit.timer = setTimeout(
+    () => {
+      console.log(say('[aurora] tentando o Claude de novo', '[aurora] trying Claude again'))
+      broadcast(brainFrame())
+    },
+    Math.max(0, limit.until - Date.now()) + 1000,
+  )
+  limit.timer.unref?.()
+  broadcast(brainFrame())
+}
 
 /**
  * Both spellings of every renamed built-in are listed on purpose. The SDK
@@ -425,6 +531,10 @@ function decideTool(name) {
     // Memory writes only to its own folder, and remembering is the point of
     // it; the Cápsula server cannot write at all.
     if (server === 'aurora_memoria' || server === 'aurora_capsula') return true
+
+    // The free brain's search and page reading go through the same guarded
+    // fetch as everything else here, and the downloads guard only reads.
+    if (server === 'aurora_web' || server === 'aurora_downloads') return true
 
     const tool = mcpToolOf(name)
 
@@ -701,6 +811,16 @@ Reverse engineering — the \`rea\` tools, when they are connected:
 - Only software the user owns or is authorised to analyse, for understanding and
   interoperability. Do not help bypass licensing, DRM or anti-cheat.
 
+Downloads guard — the \`aurora_downloads\` tools, when the guard is on:
+- Programs, installers, scripts, archives and disk images that land in the
+  user's Downloads folder are examined as they arrive, read-only, and announced
+  in your voice without you; they show up in the conversation as "(aviso da
+  guarda de downloads)".
+- \`downloads_recentes\` answers questions about what arrived or about an
+  announcement; \`examinar_arquivo\` checks any file they name.
+- The guard reads the signature, the origin and the program's header. It cannot
+  tell what a program does: for that, offer to look inside with REA.
+
 Big files:
 - When something large has to be saved — a download, an export, an analysis, an
   extracted archive, generated media — save it under ${FILES_DIR} unless they
@@ -961,7 +1081,9 @@ const handleRequest = async (req, res) => {
     // the last one has been closed for a while it switches everything off.
     const eleven = Boolean(elevenKey())
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven, pages: wss.clients.size }))
+    const brain = brainFrame()
+    delete brain.type
+    return res.end(JSON.stringify({ ok: true, tts: eleven, stt: eleven, pages: wss.clients.size, brain }))
   }
 
   // Serve local image files to the page. Screenshots and generated art land on
@@ -1307,6 +1429,28 @@ console.log(
     : say('[aurora] memória desligada', '[aurora] memory off'),
 )
 console.log(say(`[aurora] arquivos grandes em ${FILES_DIR}`, `[aurora] big files in ${FILES_DIR}`))
+// Not awaited, like everything else between listen() and the connection
+// handler below: a window that connects while this module is still paused on
+// an await is accepted by the server and then never handled, because nothing
+// is listening for it yet. One that arrives before the probe answers is told
+// about the reserve when it does, since refreshLocal broadcasts the change.
+void refreshLocal().then(() =>
+  console.log(
+    BRAIN === 'local'
+      ? local.ok
+        ? say(`[aurora] cérebro: modelo local ${local.model} (AURORA_BRAIN=local)`, `[aurora] brain: local model ${local.model} (AURORA_BRAIN=local)`)
+        : say(`[aurora] AURORA_BRAIN=local, mas ${unavailableNote(local, LANG)}`, `[aurora] AURORA_BRAIN=local, but ${unavailableNote(local, LANG)}`)
+      : BRAIN === 'claude'
+        ? say('[aurora] sem troca para o modelo local (AURORA_BRAIN=claude)', '[aurora] no switching to a local model (AURORA_BRAIN=claude)')
+        : local.ok
+          ? say(
+              `[aurora] reserva gratuita: ${local.model} pelo Ollama, entra quando o limite do Claude acabar`,
+              `[aurora] free reserve: ${local.model} through Ollama, takes over when the Claude limit runs out`,
+            )
+          : say(`[aurora] sem reserva gratuita: ${unavailableNote(local, LANG)}`, `[aurora] no free reserve: ${unavailableNote(local, LANG)}`),
+  ),
+)
+setInterval(() => void refreshLocal(), 60_000).unref()
 console.log(
   existsSync(capsulaDir())
     ? say(`[aurora] Cápsula encontrado em ${capsulaDir()} (só leitura)`, `[aurora] Cápsula found at ${capsulaDir()} (read-only)`)
@@ -1338,6 +1482,178 @@ console.log(
 )
 
 /**
+ * The little the bridge remembers between runs that is not memory: the day of
+ * the last start-up briefing. In ~/.aurora, beside the downloads guard's record
+ * and the window's own browser profile.
+ */
+const STATE_FILE = join(homedir(), '.aurora', 'estado.json')
+
+async function readState() {
+  try {
+    return JSON.parse(await readFile(STATE_FILE, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+async function writeState(state) {
+  await mkdir(dirname(STATE_FILE), { recursive: true })
+  const tmp = `${STATE_FILE}.${process.pid}.tmp`
+  await writeFile(tmp, JSON.stringify(state, null, 2))
+  await rename(tmp, STATE_FILE)
+}
+
+/** Notices from the downloads guard that wait for the next briefing instead of being said at once. */
+const briefingNews = []
+
+/**
+ * How long a new window has to ask for its briefing before the news waiting
+ * for it is sent as plain notices: the start-up sequence, the microphone and
+ * the voice come first, and a first-time permission prompt can hold them up.
+ */
+const BRIEFING_WAIT_MS = Number(process.env.AURORA_BRIEFING_WAIT_MS) || 45_000
+
+/**
+ * The downloads guard (bridge/downloads.mjs). It watches the Downloads folder
+ * and examines every program, installer, script, archive or disk image as it
+ * finishes arriving: who signed it, which site it came from, what an archive
+ * holds. Read-only; nothing is opened, moved or deleted.
+ *
+ * A file is said out loud in every open window, with its report on a blade —
+ * except an archive with nothing runnable inside, which is only recorded: a
+ * voice that remarks on every zip stops being listened to. With no window
+ * open, or for what arrived while the bridge was off, it waits for the next
+ * start-up briefing instead. AURORA_DOWNLOADS=off switches the guard off.
+ */
+const noticeHeard = new Set()
+
+function downloadFound(report) {
+  if (report.nivel === 'ok' && report.tipo === 'compactado') return
+  const notice = {
+    type: 'notice',
+    text: announce(report, LANG),
+    blade: {
+      id: `guarda-${report.sha256?.slice(0, 16) ?? Date.now().toString(36)}`,
+      title: say('GUARDA DE DOWNLOADS', 'DOWNLOADS GUARD'),
+      kind: 'markup',
+      html: reportHtml(report, LANG),
+      size: 'compact',
+      // A warning stays until he closes it; a clean report goes with the next question.
+      hold: report.nivel === 'ok' ? 'turn' : 'sticky',
+    },
+  }
+  if (report.enquantoDesligada || !sockets.size) {
+    briefingNews.push(notice)
+    return
+  }
+  broadcast(notice)
+  for (const heard of noticeHeard) heard(notice.text)
+}
+
+const DOWNLOADS = process.env.AURORA_DOWNLOADS?.trim().toLowerCase() === 'off' ? null : downloadsDir()
+const guard =
+  DOWNLOADS && existsSync(DOWNLOADS)
+    ? createGuard({ dir: DOWNLOADS, lang: LANG, onFound: downloadFound, log: (m) => console.warn(m) })
+    : null
+if (guard) {
+  guard
+    .start()
+    .then(() => console.log(say(`[aurora] guarda de downloads vigiando ${guard.dir}`, `[aurora] downloads guard watching ${guard.dir}`)))
+    .catch((err) => console.warn(say(`[aurora] a guarda de downloads não ligou: ${err.message}`, `[aurora] the downloads guard did not start: ${err.message}`)))
+} else {
+  console.log(
+    DOWNLOADS
+      ? say(`[aurora] guarda de downloads desligada: a pasta ${DOWNLOADS} não existe`, `[aurora] downloads guard off: ${DOWNLOADS} does not exist`)
+      : say('[aurora] guarda de downloads desligada (AURORA_DOWNLOADS=off)', '[aurora] downloads guard off (AURORA_DOWNLOADS=off)'),
+  )
+}
+
+/**
+ * The plan's usage, as a percentage of each window, when the account reports
+ * it. Asked of the live Claude session through the SDK's usage call, which is
+ * marked experimental — so it is feature-tested, raced against a timeout, and
+ * a briefing without it is simply a briefing without it.
+ */
+async function planUsage(session) {
+  const call = session?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
+  if (typeof call !== 'function') return null
+  try {
+    const usage = await Promise.race([call.call(session), new Promise((r) => setTimeout(() => r(null), 4000))])
+    if (!usage?.rate_limits_available || !usage.rate_limits) return null
+    const pct = (w) => (typeof w?.utilization === 'number' ? Math.round(w.utilization) : null)
+    return { fiveHour: pct(usage.rate_limits.five_hour), week: pct(usage.rate_limits.seven_day) }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * What she is asked when she switches on.
+ *
+ * The first time each day it is a real briefing: what the notes and the last
+ * conversation leave open, plus the facts below that the model cannot know for
+ * itself — the plan nearly spent, something that arrived in Downloads while
+ * she was off. Later the same day only those facts are worth saying, and on a
+ * day with none of them she says nothing beyond the greeting. Returns null for
+ * nothing to say; otherwise the prompt, and the guard's notices it carries.
+ */
+async function briefing({ session } = {}) {
+  const today = new Date().toLocaleDateString('sv')
+  const state = await readState()
+  const first = state.resumo !== today
+  const facts = []
+
+  if (BRAIN === 'local') {
+    // His own standing choice: worth a word once a day, not at every restart.
+    if (first) facts.push(say('Hoje você roda só no modelo local, por escolha dele.', 'Today you run on the local model only, by his choice.'))
+  } else if (onLocal()) {
+    facts.push(
+      say(
+        `O limite do plano do Claude está esgotado; ${untilSpoken(limit.until, LANG)} você responde pelo modelo local.`,
+        `The Claude plan's limit is spent; ${untilSpoken(limit.until, LANG)} you answer on the local model.`,
+      ),
+    )
+  } else if (BRAIN === 'auto') {
+    const used = await planUsage(session)
+    const reserve = local.ok
+      ? say(', e o modelo local gratuito assume quando acabar', ', and the free local model takes over when it runs out')
+      : ''
+    if (used?.week >= 75) {
+      facts.push(say(`O senhor já usou ${used.week}% do limite semanal do Claude${reserve}.`, `He has used ${used.week}% of the weekly Claude limit${reserve}.`))
+    } else if (used?.fiveHour >= 75) {
+      facts.push(say(`O senhor já usou ${used.fiveHour}% do limite de cinco horas do Claude${reserve}.`, `He has used ${used.fiveHour}% of the five-hour Claude limit${reserve}.`))
+    }
+  }
+  const news = briefingNews.splice(0)
+  // Facts for the model to put in its own words, so without the vocative.
+  facts.push(...news.map((n) => n.text.replace(/^(?:Senhor|Sir), /, '')))
+
+  if (!facts.length && (!first || !memory)) return null
+  state.resumo = today
+  await writeState(state).catch((err) => console.warn(`[aurora] estado: ${err.message}`))
+
+  const ask = first
+    ? say(
+        '[RESUMO AO LIGAR] O senhor acabou de ligar a AURORA e já foi cumprimentado. Em no máximo três frases ' +
+          'curtas, diga o que merece a atenção dele hoje: compromissos e pendências das suas anotações, o que ' +
+          'ficou em aberto na última conversa, e os fatos abaixo, se houver. Não cumprimente de novo, não leia as ' +
+          'anotações uma a uma e não diga quantas são. Se nada merecer atenção, diga apenas que não há pendências.',
+        '[START-UP BRIEFING] He has just switched AURORA on and has already been greeted. In three short ' +
+          'sentences at most, say what deserves his attention today: appointments and open items in your notes, ' +
+          'anything left open in the last conversation, and the facts below, if any. Do not greet him again, do ' +
+          'not read the notes out one by one and do not count them. If nothing deserves attention, just say there ' +
+          'is nothing pending.',
+      )
+    : say(
+        '[AVISO AO LIGAR] O senhor acabou de religar a AURORA e já foi cumprimentado. Em uma ou duas frases ' +
+          'curtas, diga só os fatos abaixo. Não cumprimente de novo.',
+        '[START-UP NOTICE] He has just switched AURORA back on and has already been greeted. In one or two short ' +
+          'sentences, say only the facts below. Do not greet him again.',
+      )
+  return { prompt: facts.length ? `${ask}\n\n${say('Fatos', 'Facts')}:\n- ${facts.join('\n- ')}` : ask, news }
+}
+
+/**
  * What to tell the browser when a turn ends badly. Plain sentences, because
  * whatever reaches the client is liable to be spoken.
  */
@@ -1359,57 +1675,19 @@ const RESULT_FAILURES = PT
 
 wss.on('connection', (socket) => {
   console.log('[aurora] client connected')
-
-  // Answer the HUD straight away rather than making it wait for the agent's
-  // first turn. Refined later by the real init message.
-  socket.send(
-    JSON.stringify({ type: 'ready', servers: Object.keys(MCP_SERVERS), memory: Boolean(memory) }),
-  )
-
-  /** Resolves the pending user message into the SDK's input generator. */
-  let deliver = null
-  let closed = false
-  const inbox = []
-
-  async function* userMessages() {
-    while (!closed) {
-      const text =
-        inbox.shift() ??
-        (await new Promise((resolve) => {
-          deliver = resolve
-        }))
-      if (closed || text == null) return
-      yield {
-        type: 'user',
-        message: { role: 'user', content: text },
-        parent_tool_use_id: null,
-      }
-    }
-  }
+  sockets.add(socket)
 
   const send = (msg) => {
     if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(msg))
   }
 
-  /**
-   * Which question the agent is currently answering.
-   *
-   * The stream carries no notion of a turn, so without this the client cannot
-   * tell the tail of an abandoned answer from the start of the new one — it
-   * attaches a listener and receives whatever is on the socket. Echoing the
-   * id the client sent lets it ignore anything that is not its own, which is
-   * the only reliable fix: no amount of waiting on this side changes what a
-   * listener over there has already heard.
-   */
-  let answering = null
-  const sendTurn = (msg) => send({ ...msg, ask: answering })
+  // Answer the HUD straight away rather than making it wait for the agent's
+  // first turn. Refined later by the real init message.
+  send({ type: 'ready', servers: Object.keys(MCP_SERVERS), memory: Boolean(memory) })
+  // Which brain is answering, so the HUD can say so when it is the free one.
+  send(brainFrame())
 
-  /**
-   * The questions handed to the agent, oldest first. The SDK answers them in
-   * order with exactly one result each, so the head of this queue is always
-   * the question a result belongs to — which is what the memory log needs.
-   */
-  const asked = []
+  let closed = false
 
   /**
    * Asking the browser for something and waiting for the answer.
@@ -1439,6 +1717,18 @@ wss.on('connection', (socket) => {
     })
 
   /**
+   * Which question a frame belongs to.
+   *
+   * The stream carries no notion of a turn, so without this the client cannot
+   * tell the tail of an abandoned answer from the start of the new one — it
+   * attaches a listener and receives whatever is on the socket. Echoing the id
+   * the client sent lets it ignore anything that is not its own, which is the
+   * only reliable fix: no amount of waiting on this side changes what a
+   * listener over there has already heard.
+   */
+  const sendTurn = (turn, msg) => send({ ...msg, ask: turn.id })
+
+  /**
    * Announcing a tool on the HUD, once, and only if it actually runs.
    *
    * A tool_use block surfaces twice — as a partial stream event and again on
@@ -1461,6 +1751,28 @@ wss.on('connection', (socket) => {
    */
   const seenTools = new Set()
   const heldTools = new Map()
+
+  const announceTool = (turn, id, name) => {
+    if (!name || (id && seenTools.has(id))) return
+    if (id) seenTools.add(id)
+    // The display tool isn't work being done, it's the HUD drawing itself —
+    // announcing it would put "aurora · display" in the tool badge and trigger
+    // a "working on it" filler for something already on screen.
+    if (name === 'mcp__aurora__display') return
+    // The ui_* tools are the same case one step further: retinting the
+    // interface is the interface talking about itself, not work being done for
+    // the user, and the badge would be describing the very thing they can see.
+    if (name.startsWith('mcp__aurora_ui__')) return
+    if (decideTool(name)) return sendTurn(turn, { type: 'tool', name })
+    if (id) heldTools.set(id, name)
+  }
+
+  const settleTool = (turn, id, failed) => {
+    const name = heldTools.get(id)
+    if (name === undefined) return
+    heldTools.delete(id)
+    if (!failed) sendTurn(turn, { type: 'tool', name })
+  }
 
   /**
    * Resolves when the turn in flight has actually finished.
@@ -1493,65 +1805,91 @@ wss.on('connection', (socket) => {
    */
   const SETTLE_CAP_MS = 400
 
-  const announceTool = (id, name) => {
-    if (!name || (id && seenTools.has(id))) return
-    if (id) seenTools.add(id)
-    // The display tool isn't work being done, it's the HUD drawing itself —
-    // announcing it would put "aurora · display" in the tool badge and trigger
-    // a "working on it" filler for something already on screen.
-    if (name === 'mcp__aurora__display') return
-    // The ui_* tools are the same case one step further: retinting the
-    // interface is the interface talking about itself, not work being done for
-    // the user, and the badge would be describing the very thing they can see.
-    if (name.startsWith('mcp__aurora_ui__')) return
-    if (decideTool(name)) return sendTurn({ type: 'tool', name })
-    if (id) heldTools.set(id, name)
-  }
+  /**
+   * The last question asked, which is what an interrupt is aimed at: the page
+   * sends one whenever it abandons a turn, and it is always its latest. Set as
+   * the question arrives rather than when it is handed over, so an interrupt
+   * that lands in between still finds it.
+   */
+  let current = null
 
-  const settleTool = (id, failed) => {
-    const name = heldTools.get(id)
-    if (name === undefined) return
-    heldTools.delete(id)
-    if (!failed) sendTurn({ type: 'tool', name })
-  }
+  /**
+   * The conversation so far as plain questions and answers.
+   *
+   * Each brain keeps its own transcript inside its session, and neither can
+   * see the other's. So when the free brain takes over mid-conversation it is
+   * told what was just said, and when Claude comes back it is told what it
+   * missed — otherwise "and the other one?" lands on a brain that never heard
+   * the first.
+   */
+  const history = []
+  const HISTORY_KEEP = 12
 
-  const session = query({
-    prompt: userMessages(),
-    options: {
-      // Everything Claude Code has configured, plus the HUD as an in-process
-      // server. The HUD's handler closes over this socket, so a `display` call
-      // lands on screen directly — which is also why this object is built per
-      // connection rather than once.
-      mcpServers: {
-        ...MCP_SERVERS,
-        aurora: displayServer(
-          (panel) => send({ type: 'panel', panel }),
-          (blade) => send({ type: 'blade', blade }),
-        ),
-        // The interface controls, on the same socket. A separate key because
-        // MCP tool names are `mcp__<key>__<tool>` and one key can only carry
-        // one server; the underscore in it is why decideTool and announceTool
-        // both name `aurora_ui` explicitly.
-        aurora_ui: uiServer((op, args) => send({ type: 'ui', op, args })),
-        // The user's own Chrome, over the extension's native-host socket. It
-        // holds no per-connection state, but it is built here with the rest so
-        // the write gate is read once, at the same point as everything else.
-        aurora_chrome: chromeServer({ allowWrites: ALLOW_WRITES }),
-        // The camera, which unlike everything else here has to ask and wait.
-        aurora_eyes: visionServer(ask),
-        // Long-term memory on disk, shared by every connection.
-        ...(memory ? { aurora_memoria: memory.server() } : {}),
-        // The user's Cápsula node, read-only, when there is one on this machine.
-        ...(existsSync(capsulaDir()) ? { aurora_capsula: capsulaServer() } : {}),
-      },
-      // A plain system prompt, not the claude_code preset. The preset is
-      // tuned for a coding agent — verbose, file-oriented, and a large chunk
-      // of input tokens on every turn. Replacing it makes the persona stick,
-      // keeps answers short enough to speak, and cuts cost per turn.
-      //
-      // The memory block rides at the end: notes and the latest exchanges as
-      // they stood when this connection opened.
-      systemPrompt: memoryBlock ? `${SYSTEM_PROMPT}\n\n${memoryBlock}` : SYSTEM_PROMPT,
+  /** The limit this window has already been told about out loud. */
+  let heard = 0
+
+  /**
+   * One brain: an agent session, the questions handed to it, and how much of
+   * the shared history it has seen. Claude starts with the window; the free
+   * brain starts the first time it is needed, and is replaced after eight
+   * answers so its transcript never outgrows the context a home graphics card
+   * can hold.
+   */
+  const brains = { claude: null, local: null }
+  const starting = { claude: null, local: null }
+  const LOCAL_TURNS = 8
+
+  async function startBrain(kind) {
+    const brain = {
+      kind,
+      model: kind === 'local' ? local.model : MODEL,
+      inbox: [],
+      wake: null,
+      // The questions handed to this session, oldest first. It answers them in
+      // order with exactly one result each, so the head of this queue is
+      // always the question a result belongs to.
+      queue: [],
+      seen: kind === 'local' ? Math.max(0, history.length - 4) : history.length,
+      answered: 0,
+      closed: false,
+    }
+
+    async function* messages() {
+      while (!closed && !brain.closed) {
+        const text =
+          brain.inbox.shift() ??
+          (await new Promise((resolve) => {
+            brain.wake = resolve
+          }))
+        if (closed || brain.closed || text == null) return
+        yield {
+          type: 'user',
+          message: { role: 'user', content: text },
+          parent_tool_use_id: null,
+        }
+      }
+    }
+
+    brain.push = (text) => {
+      if (brain.wake) {
+        const wake = brain.wake
+        brain.wake = null
+        wake(text)
+      } else {
+        brain.inbox.push(text)
+      }
+    }
+
+    brain.close = () => {
+      if (brain.closed) return
+      brain.closed = true
+      const wake = brain.wake
+      brain.wake = null
+      wake?.(null)
+      brain.session?.close?.()
+    }
+
+    const common = {
       // Run from the home directory so project-scoped MCP servers don't shadow
       // the global ones, and so file tools have a sane root.
       cwd: homedir(),
@@ -1566,19 +1904,8 @@ wss.on('connection', (socket) => {
       // into a conversation that is meant to be two sentences long.
       //
       // The cost is that MCP servers stop being discovered too, which is why
-      // mcpServers above passes them in by hand.
+      // mcpServers below passes them in by hand.
       settingSources: [],
-      // Stated explicitly, and it has to be.
-      //
-      // With no `model` here the SDK falls back to its own default, which on
-      // this machine resolved to claude-opus-4-8[1m] — not what src/config.ts
-      // declares for the browser-direct path, and not anything anyone chose.
-      // Normally your own `/model` preference would decide, but that lives in
-      // the settings files `settingSources: []` deliberately stops loading, so
-      // without this line nothing in the project has a say at all.
-      model: MODEL,
-      effort: EFFORT,
-      maxTurns: 24,
       permissionMode: 'default',
       // Without this the SDK only emits whole assistant messages, and AURORA
       // would sit silent until the entire answer was written. Partial events
@@ -1612,16 +1939,270 @@ wss.on('connection', (socket) => {
               ),
             }
       },
-    },
-  })
+    }
 
-  // Pump the session's output stream to the browser for as long as it lives.
-  ;(async () => {
+    // The HUD as an in-process server. Its handler closes over this socket, so
+    // a `display` call lands on screen directly — which is also why this is
+    // built per connection rather than once.
+    const hud = displayServer(
+      (panel) => send({ type: 'panel', panel }),
+      (blade) => send({ type: 'blade', blade }),
+      kind === 'local' ? { only: ['blade'] } : {},
+    )
+    // Long-term memory on disk, shared by every connection, the user's Cápsula
+    // node, read-only, when there is one on this machine, and the downloads
+    // guard's two questions.
+    const shared = {
+      ...(memory ? { aurora_memoria: memory.server() } : {}),
+      ...(existsSync(capsulaDir()) ? { aurora_capsula: capsulaServer() } : {}),
+      ...(guard ? { aurora_downloads: downloadsServer(guard, { lang: LANG }) } : {}),
+    }
+
+    if (kind === 'claude') {
+      brain.session = query({
+        prompt: messages(),
+        options: {
+          ...common,
+          // Everything Claude Code has configured, plus the in-process servers.
+          mcpServers: {
+            ...MCP_SERVERS,
+            aurora: hud,
+            // The interface controls, on the same socket. A separate key because
+            // MCP tool names are `mcp__<key>__<tool>` and one key can only carry
+            // one server; the underscore in it is why decideTool and announceTool
+            // both name `aurora_ui` explicitly.
+            aurora_ui: uiServer((op, args) => send({ type: 'ui', op, args })),
+            // The user's own Chrome, over the extension's native-host socket. It
+            // holds no per-connection state, but it is built here with the rest so
+            // the write gate is read once, at the same point as everything else.
+            aurora_chrome: chromeServer({ allowWrites: ALLOW_WRITES }),
+            // The camera, which unlike everything else here has to ask and wait.
+            aurora_eyes: visionServer(ask),
+            ...shared,
+          },
+          // A plain system prompt, not the claude_code preset. The preset is
+          // tuned for a coding agent — verbose, file-oriented, and a large chunk
+          // of input tokens on every turn. Replacing it makes the persona stick,
+          // keeps answers short enough to speak, and cuts cost per turn.
+          //
+          // The memory block rides at the end: notes and the latest exchanges as
+          // they stood when this connection opened.
+          systemPrompt: memoryBlock ? `${SYSTEM_PROMPT}\n\n${memoryBlock}` : SYSTEM_PROMPT,
+          // Stated explicitly, and it has to be.
+          //
+          // With no `model` here the SDK falls back to its own default, which on
+          // this machine resolved to claude-opus-4-8[1m] — not what src/config.ts
+          // declares for the browser-direct path, and not anything anyone chose.
+          // Normally your own `/model` preference would decide, but that lives in
+          // the settings files `settingSources: []` deliberately stops loading, so
+          // without this line nothing in the project has a say at all.
+          model: MODEL,
+          effort: EFFORT,
+          maxTurns: 24,
+        },
+      })
+    } else {
+      // The free brain's kit: the screen, search, memory, the Cápsula, and the
+      // camera only if the model can see. No built-in tools at all — their
+      // descriptions alone would fill a small model's context — and the HUD's
+      // freehand `display` withheld, since composing markup is where a small
+      // model goes wrong in public.
+      const notes = memory ? await memory.context({ maxNotes: 30, maxTurns: 4, budget: 3000 }).catch(() => '') : ''
+      brain.session = query({
+        prompt: messages(),
+        options: {
+          ...common,
+          mcpServers: local.tools
+            ? {
+                aurora: hud,
+                aurora_web: webServer({ lang: LANG }),
+                ...shared,
+                ...(local.vision ? { aurora_eyes: visionServer(ask) } : {}),
+              }
+            : {},
+          tools: [],
+          // No transcripts under ~/.claude for these sessions, and so none of
+          // the titles and summaries the agent writes for them — side calls
+          // that would queue on the same graphics card as the answer.
+          persistSession: false,
+          systemPrompt: [localPrompt(LANG, { chosen: BRAIN === 'local', downloads: Boolean(guard) }), notes].filter(Boolean).join('\n\n'),
+          model: local.model,
+          // A voice cannot wait for a small model to think out loud first.
+          thinking: { type: 'disabled' },
+          // Small models can circle; eight rounds of tools is not an answer.
+          maxTurns: 8,
+          env: localEnv(local.model, { context: local.context }),
+        },
+      })
+      console.log(say(`[aurora] modelo local ${local.model} em ${OLLAMA_URL}`, `[aurora] local model ${local.model} at ${OLLAMA_URL}`))
+    }
+
+    void pump(brain)
+    return brain
+  }
+
+  /** The brain of that kind, started if need be — once, however many ask at the same moment. */
+  async function brainFor(kind) {
+    const live = brains[kind]
+    if (live && !live.closed) return live
+    starting[kind] ??= startBrain(kind).finally(() => {
+      starting[kind] = null
+    })
+    brains[kind] = await starting[kind]
+    return brains[kind]
+  }
+
+  /** What the other brain said while this one was not listening, as a preface. */
+  function recap(brain) {
+    const missed = history
+      .slice(brain.seen)
+      .filter((e) => e.brain !== brain)
+      .slice(-6)
+    brain.seen = history.length
+    if (!missed.length) return ''
+    const cut = (t) => (t.length > 400 ? `${t.slice(0, 400)}…` : t)
+    return [
+      say(
+        '[Para contexto: o trecho recente da conversa que você não acompanhou]',
+        '[For context: the recent part of the conversation you did not see]',
+      ),
+      ...missed.map((e) => `${say('Ele', 'User')}: ${cut(e.q)}\nAURORA: ${cut(e.a)}`),
+    ].join('\n')
+  }
+
+  /** Hands a turn to a brain: the question, prefaced with whatever it needs to know. */
+  async function deliver(kind, turn) {
+    const brain = await brainFor(kind)
+    // Talked over while that brain was starting: nobody is listening for it.
+    if (turn.dropped) return
+    turn.brain = brain
+    brain.queue.push(turn)
+    const parts = [kind === 'local' ? nowTag(LANG) : '', recap(brain), turn.prompt].filter(Boolean)
+    brain.push(parts.join('\n\n'))
+  }
+
+  /** Says the switch to the free brain, once per limit and per window, ahead of the answer. */
+  function noticeSwitch(turn) {
+    if (BRAIN !== 'auto' || heard === limit.episode) return
+    heard = limit.episode
+    const line = switchNotice(limit.reason, limit.until, LANG)
+    turn.answer += `${line} `
+    sendTurn(turn, { type: 'text', delta: `${line} ` })
+  }
+
+  /**
+   * Claude said its limit is reached in the middle of this turn. If there is a
+   * free brain, the same question goes to it under the same id, so the window
+   * hears one answer and never knows two brains were involved; Claude's own
+   * ending for the turn is then swallowed. If there is none, the turn ends at
+   * once with a sentence saying so — a plan's limit lasts hours, and the
+   * agent's retries would only keep him waiting in silence to learn it. A 429
+   * the agent is about to retry is the exception: with nothing else to try,
+   * the retry is worth its few seconds.
+   */
+  function divert(brain, turn, signal) {
+    reachLimit(signal)
+    // Paid extra usage begins after an answer is already paid for: no reason
+    // to throw that one away. The next question goes to the free brain.
+    if (signal.reason === 'extra') return
+    if (!turn || turn.diverted) return
+    turn.limited = true
+    const free = BRAIN === 'auto' && local.ok
+    if (!free && signal.transient) return
+    turn.diverted = true
     try {
-      for await (const msg of session) {
+      void brain.session.interrupt?.()?.catch?.(() => {})
+    } catch {
+      // Already over, which is fine: its ending is swallowed below either way.
+    }
+    if (!free) {
+      sendTurn(turn, { type: 'error', message: limitMessage() })
+      record(turn, '', brain)
+      finishTurn?.()
+      finishTurn = null
+      return
+    }
+    const again = { id: turn.id, text: turn.text, prompt: turn.prompt, kind: turn.kind, log: turn.log, answer: '' }
+    if (current === turn) current = again
+    noticeSwitch(again)
+    void deliver('local', again).catch((err) => {
+      console.error('[aurora] local model:', err)
+      sendTurn(again, { type: 'error', message: say(`O modelo local não respondeu: ${err.message}`, `The local model did not answer: ${err.message}`) })
+    })
+  }
+
+  /** One exchange into the shared history, which keeps only the latest. */
+  function remember(entry) {
+    history.push(entry)
+    if (history.length > HISTORY_KEEP) {
+      const drop = history.length - HISTORY_KEEP
+      history.splice(0, drop)
+      for (const b of Object.values(brains)) if (b) b.seen = Math.max(0, b.seen - drop)
+    }
+  }
+
+  // What the downloads guard said in this window is part of the conversation:
+  // "and what is in it?" has to reach a brain that knows which file.
+  const heardNotice = (line) => remember({ q: say('(aviso da guarda de downloads)', '(downloads guard notice)'), a: line, brain: null })
+  noticeHeard.add(heardNotice)
+
+  // What the guard found while no window was open waits for the start-up
+  // briefing. A window that only reconnected, after the bridge itself was
+  // restarted, never asks for one; so whatever is still waiting once a window
+  // has had time to ask goes out as notices instead.
+  const unclaimed = setTimeout(() => {
+    for (const notice of briefingNews.splice(0)) {
+      send(notice)
+      heardNotice(notice.text)
+    }
+  }, BRIEFING_WAIT_MS)
+
+  /** Into the shared history and the day's log, answered or not. */
+  function record(turn, answer, brain) {
+    remember({
+      q: turn.kind === 'briefing' ? say('(resumo ao ligar)', '(start-up briefing)') : turn.text,
+      a: answer || '…',
+      brain,
+    })
+    // An empty answer is logged as such: what was asked is worth keeping
+    // either way. The briefing is not something he asked.
+    if (memory && turn.log !== false) {
+      memory.logTurn(turn.text, answer).catch((err) => console.warn(`[aurora] memória: ${err.message}`))
+    }
+  }
+
+  /** The sentence for a limit with nothing to fall back on. Shown, not spoken. */
+  const limitMessage = () =>
+    BRAIN === 'claude'
+      ? say(
+          `O limite do plano do Claude acabou${limit.until ? ` e renova ${whenShown(limit.until, LANG)}` : ''}.`,
+          `The Claude plan's limit has run out${limit.until ? ` and resets ${whenShown(limit.until, LANG)}` : ''}.`,
+        )
+      : say(
+          `O limite do plano do Claude acabou, e não há modelo local para continuar: ${unavailableNote(local, LANG)}.`,
+          `The Claude plan's limit has run out, and there is no local model to carry on: ${unavailableNote(local, LANG)}.`,
+        )
+
+  // Pump one brain's output stream to the browser for as long as it lives.
+  async function pump(brain) {
+    try {
+      for await (const msg of brain.session) {
         if (process.env.AURORA_DEBUG === '1') {
-          console.log('[msg]', msg.type, msg.event?.type ?? '')
+          console.log('[msg]', brain.kind, msg.type, msg.subtype ?? msg.event?.type ?? '', msg.subtype === 'api_retry' ? `${msg.error} ${msg.attempt}/${msg.max_retries} in ${msg.retry_delay_ms} ms` : msg.type === 'rate_limit_event' ? JSON.stringify(msg.rate_limit_info) : '')
         }
+
+        const turn = brain.queue[0] ?? null
+
+        // Claude's word on its own limits, wherever in the stream it turns up.
+        if (brain.kind === 'claude') {
+          const signal = limitSignal(msg)
+          if (signal?.info) limit.info = signal.info
+          if (signal?.hit) divert(brain, turn, signal)
+        }
+
+        // A turn handed over to the other brain: nothing more of it goes out
+        // from here except the bookkeeping of its ending.
+        const live = turn && !turn.diverted
 
         switch (msg.type) {
           // Raw Anthropic stream events, surfaced by includePartialMessages.
@@ -1630,35 +2211,39 @@ wss.on('connection', (socket) => {
           // carries no deltas either. Turn includePartialMessages off and
           // AURORA goes completely mute.
           case 'stream_event': {
+            if (!live) break
             const ev = msg.event
             if (
               ev?.type === 'content_block_delta' &&
               ev.delta?.type === 'text_delta' &&
               ev.delta.text
             ) {
-              sendTurn({ type: 'text', delta: ev.delta.text })
+              turn.answer += ev.delta.text
+              sendTurn(turn, { type: 'text', delta: ev.delta.text })
             }
             if (
               ev?.type === 'content_block_start' &&
               ev.content_block?.type === 'tool_use'
             ) {
-              announceTool(ev.content_block.id, ev.content_block.name)
+              announceTool(turn, ev.content_block.id, ev.content_block.name)
             }
             break
           }
 
           case 'assistant': {
+            if (!live) break
             // Fallback for builds that emit whole assistant messages rather
             // than partial events. Deduped against the stream_event path.
             for (const block of msg.content ?? msg.message?.content ?? []) {
               if (block.type === 'tool_use') {
-                announceTool(block.id, block.name)
+                announceTool(turn, block.id, block.name)
               }
             }
             break
           }
 
           case 'user': {
+            if (!live) break
             // Tool results come back as a user message. This is the only place
             // a held announcement can be resolved: a refused tool arrives with
             // is_error set and stays off the HUD, anything else ran.
@@ -1666,42 +2251,48 @@ wss.on('connection', (socket) => {
             if (!Array.isArray(blocks)) break
             for (const block of blocks) {
               if (block?.type === 'tool_result') {
-                settleTool(block.tool_use_id, block.is_error === true)
+                settleTool(turn, block.tool_use_id, block.is_error === true)
               }
             }
             break
           }
 
-          case 'result':
+          case 'result': {
+            brain.queue.shift()
+            if (!turn || turn.diverted) break
+            brain.answered += 1
             // A result is not automatically a success. The error subtypes
             // carry no `result` field at all, so reporting them as 'done' with
             // empty text is indistinguishable from a turn that simply had
             // nothing to say — the HUD stops spinning and AURORA stands there
-            // silent. Say what happened instead.
-            if (msg.subtype === 'success') {
-              sendTurn({
+            // silent. Say what happened instead. And a limit message is not an
+            // answer either, even when it arrives as one.
+            //
+            // A limit signal earlier in the turn does not settle it on its own:
+            // a 429 can be retried into a real answer, and a real answer wins.
+            let answer = ''
+            const limitText = limitSignal(msg)?.hit
+            const streamed = Boolean(turn.answer.trim())
+            if (msg.subtype === 'success' && !limitText && (streamed || !turn.limited)) {
+              answer = turn.answer || msg.result || ''
+              sendTurn(turn, {
                 type: 'done',
-                text: msg.result ?? '',
+                text: answer,
                 costUsd: msg.total_cost_usd ?? null,
               })
+            } else if (turn.limited || limitText) {
+              sendTurn(turn, { type: 'error', message: limitMessage() })
             } else {
               console.error(
-                `[aurora] turn failed: ${msg.subtype}`,
+                `[aurora] turn failed (${brain.kind}): ${msg.subtype}`,
                 msg.errors ?? '',
               )
-              sendTurn({
+              sendTurn(turn, {
                 type: 'error',
                 message: RESULT_FAILURES[msg.subtype] ?? RESULT_FAILURES.default,
               })
             }
-            // Into the day's log, answered or not. An empty answer is logged
-            // as such: what was asked is worth keeping either way.
-            const said = asked.shift()
-            if (memory && said !== undefined) {
-              memory
-                .logTurn(said, msg.subtype === 'success' ? (msg.result ?? '') : '')
-                .catch((err) => console.warn(`[aurora] memória: ${err.message}`))
-            }
+            record(turn, answer, brain)
             // Whatever was waiting on this turn to finish can go now. This is
             // the only place a turn is genuinely over.
             finishTurn?.()
@@ -1710,10 +2301,17 @@ wss.on('connection', (socket) => {
             // otherwise grow for as long as the socket is open.
             seenTools.clear()
             heldTools.clear()
+            // The free brain is replaced before its transcript outgrows its
+            // context; the next one starts with a recap instead.
+            if (brain.kind === 'local' && brain.answered >= LOCAL_TURNS && !brain.queue.length) {
+              if (brains.local === brain) brains.local = null
+              brain.close()
+            }
             break
+          }
 
           case 'system':
-            if (msg.subtype === 'init') {
+            if (msg.subtype === 'init' && brain.kind === 'claude') {
               // Servers report 'pending' until first use — they connect
               // lazily — so only drop the ones that are actually unusable.
               const usable = (msg.mcp_servers ?? [])
@@ -1726,18 +2324,71 @@ wss.on('connection', (socket) => {
         }
       }
     } catch (err) {
-      console.error('[aurora] session error:', err)
+      if (brain.closed || closed) return
+      console.error(`[aurora] ${brain.kind} session error:`, err)
+      if (brain.kind === 'local') {
+        // The free brain failing is not the end of the window: fail what it
+        // holds, drop it, and the next question starts a fresh one.
+        for (const t of brain.queue.splice(0)) {
+          if (!t.diverted) {
+            sendTurn(t, {
+              type: 'error',
+              message: say(`O modelo local falhou: ${err?.message ?? err}`, `The local model failed: ${err?.message ?? err}`),
+            })
+          }
+        }
+        if (brains.local === brain) brains.local = null
+        brain.close()
+        finishTurn?.()
+        finishTurn = null
+        return
+      }
       send({ type: 'error', message: String(err?.message ?? err) })
       // The stream is finished either way — nothing will ever be read from it
       // again. Leaving the socket open would leave the client believing it has
       // a working bridge, and every later question would hang for ever waiting
       // on a pump that has already stopped. Close it so it reconnects.
       closed = true
-      deliver?.(null)
-      session.close?.()
+      for (const b of Object.values(brains)) b?.close()
       socket.close()
     }
-  })()
+  }
+
+  // Claude starts with the window, as it always has: its init message is what
+  // fills the HUD's list of systems. The free brain waits until it is needed.
+  if (BRAIN !== 'local') void brainFor('claude')
+
+  /** Where a new question goes. */
+  function chooseBrain() {
+    if (BRAIN === 'local') return local.ok ? 'local' : null
+    if (onLocal()) return 'local'
+    if (limit.reason && Date.now() >= limit.until) {
+      limit.reason = null
+      broadcast(brainFrame())
+    }
+    return 'claude'
+  }
+
+  /** A question, or the briefing's prompt, to whichever brain should answer it. */
+  async function handOver(turn) {
+    if (turn.dropped) return
+    const kind = chooseBrain()
+    if (!kind) {
+      return sendTurn(turn, {
+        type: 'error',
+        message: say(`O modelo local não está disponível: ${unavailableNote(local, LANG)}.`, `The local model is not available: ${unavailableNote(local, LANG)}.`),
+      })
+    }
+    if (kind === 'local') {
+      // The briefing says it in its own words; the next answer need not.
+      if (turn.kind === 'briefing') heard = limit.episode
+      else noticeSwitch(turn)
+    }
+    await deliver(kind, turn).catch((err) => {
+      console.error(`[aurora] ${kind}:`, err)
+      sendTurn(turn, { type: 'error', message: String(err?.message ?? err) })
+    })
+  }
 
   socket.on('message', (raw) => {
     let msg
@@ -1761,17 +2412,40 @@ wss.on('connection', (socket) => {
        * Waiting costs nothing when nothing is interrupting — the chain is an
        * already-resolved promise — and removes the cross-talk when there is.
        */
-      const text = msg.text
-      const id = typeof msg.id === 'string' ? msg.id : null
-      void settling.then(() => {
-        answering = id
-        asked.push(text)
-        if (deliver) {
-          const resolve = deliver
-          deliver = null
-          resolve(text)
-        } else {
-          inbox.push(text)
+      const turn = {
+        id: typeof msg.id === 'string' ? msg.id : null,
+        text: msg.text,
+        prompt: msg.text,
+        kind: msg.kind === 'briefing' ? 'briefing' : 'question',
+        log: msg.kind !== 'briefing',
+        answer: '',
+      }
+      current = turn
+      void settling.then(async () => {
+        if (turn.kind !== 'briefing') return handOver(turn)
+        // The plan's usage is read off the live Claude session, which at
+        // power-on may still be starting.
+        const claude = BRAIN === 'local' ? null : await brainFor('claude').catch(() => null)
+        const brief = await briefing({ session: claude?.session }).catch((err) => {
+          console.warn(`[aurora] briefing: ${err.message}`)
+          return null
+        })
+        // Nothing worth saying is a briefing too: the shortest one.
+        if (!brief) return sendTurn(turn, { type: 'done', text: '' })
+        turn.prompt = brief.prompt
+        await handOver(turn)
+        // The guard's reports go on screen as she starts, so a warning stays
+        // up even if he talks over the sentence that carries it. A briefing
+        // that never reached a brain (he talked over it before it was ready,
+        // or there was none to give it to) still owes him what the guard
+        // found: it goes out as ordinary notices, said at the next quiet moment.
+        for (const notice of brief.news) {
+          if (turn.brain) {
+            send({ type: 'blade', blade: notice.blade })
+          } else {
+            send(notice)
+            heardNotice(notice.text)
+          }
         }
       })
     }
@@ -1788,7 +2462,12 @@ wss.on('connection', (socket) => {
     if (msg.type === 'interrupt') {
       // Held so the next question can wait for it rather than racing it.
       const stopped = turnFinished()
-      settling = Promise.resolve(session.interrupt?.())
+      const brain = current?.brain
+      // Not handed to a brain yet (still queued behind the last interrupt, the
+      // briefing gathering its facts, the free brain starting): there is
+      // nothing to stop, so it is never sent.
+      if (current && !brain) current.dropped = true
+      settling = Promise.resolve(brain?.session?.interrupt?.())
         .catch(() => {})
         .then(() =>
           Promise.race([
@@ -1802,7 +2481,9 @@ wss.on('connection', (socket) => {
   socket.on('close', () => {
     console.log('[aurora] client disconnected')
     closed = true
-    deliver?.(null)
-    session.close?.()
+    sockets.delete(socket)
+    noticeHeard.delete(heardNotice)
+    clearTimeout(unclaimed)
+    for (const b of Object.values(brains)) b?.close()
   })
 })

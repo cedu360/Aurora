@@ -19,11 +19,14 @@
 
 Você liga o computador, a janela da AURORA abre sozinha, o reator acende e ela diz **"Bom dia, senhor. Todos os sistemas prontos."** A partir daí é só falar: **"Ei Aurora, …"**.
 
-Ela responde em voz alta, pesquisa na web, lê páginas e artigos, mostra o que achou em painéis na tela, olha pela câmera, usa o seu próprio Chrome já logado, lembra do que você pediu semanas atrás e abre programas por dentro para explicar o que eles fazem.
+Ela responde em voz alta, pesquisa na web, lê páginas e artigos, mostra o que achou em painéis na tela, olha pela câmera, usa o seu próprio Chrome já logado, lembra do que você pediu semanas atrás e abre programas por dentro para explicar o que eles fazem. Quando o limite do plano do Claude acaba, ela continua de graça num modelo que roda no seu computador.
 
 ## Por que ela é diferente
 
 - **Português de verdade.** Atende por "Ei Aurora", entende português do Brasil, responde em português e escolhe sozinha a melhor voz brasileira instalada. Não é uma tradução por cima de um assistente em inglês: as regras de fala, as palavras de "pare" e "espera", e o jeito de falar números e horas foram feitos para o português.
+- **Não para quando o plano acaba.** Quando o limite do Claude acaba, ela passa sozinha para um modelo gratuito que roda no seu computador pelo [Ollama](https://ollama.com), avisa uma vez ("até as dezenove horas, respondo pelo modelo local") e volta para o Claude quando o limite renova, sabendo o que foi dito no meio-tempo. Se o plano tem uso extra pago, ela troca antes de começar a cobrar. `npm run ollama` instala e prepara tudo.
+- **Guarda de downloads.** Chegou um programa, instalador, script ou APK na pasta Downloads? Ela examina na hora, sem abrir nada (quem assinou, de que site veio, extensão dupla, programa escondido no zip) e avisa em voz: *"Senhor, o programa fatura.pdf chegou em Downloads com extensão dupla. Melhor não abrir antes de examinar."* Os detalhes ficam na tela e, com o REA, ela explica o que o programa faz.
+- **Resumo ao ligar.** Na primeira vez do dia, logo depois do "bom dia", ela diz em três frases o que merece atenção: o que você pediu para lembrar, o que ficou pendente, o plano perto do limite, o que chegou em Downloads enquanto ela estava desligada.
 - **Liga junto com o computador.** Um comando cria o atalho na inicialização do Windows. A cada login ela sobe escondida, abre a própria janela e liga sozinha. Fechar a janela desliga tudo; se algo cair, ela religa.
 - **Memória que você controla.** Tudo o que ela anota fica num arquivo de texto que você abre e edita, com as conversas de cada dia ao lado. A pasta é espelhada em outro disco (D: e E:, por padrão) e, se um dos dois falhar, ela recupera sozinha ao ligar. Ela se recusa a guardar senhas e chaves.
 - **Engenharia reversa por voz.** "Ei Aurora, o que esse programa faz?" Com o [REA](https://github.com/morluto/rea) ela inspeciona executáveis, bibliotecas, APKs e sites e responde em uma ou duas frases, com os detalhes na tela. Só as 125 ferramentas de leitura ficam liberadas.
@@ -47,6 +50,7 @@ cd C:\Aurora
 npm install
 npm run setup               # confere o computador, não muda nada
 npm run inicio-automatico   # liga junto com o Windows e cria o atalho na área de trabalho
+npm run ollama              # opcional: o modelo gratuito para quando o limite acabar
 ```
 
 Dê dois cliques no atalho **Aurora** da área de trabalho. Na primeira vez a janela pede o microfone: clique em **Permitir** e diga **"Ei Aurora, que horas são?"**
@@ -63,9 +67,15 @@ Prefere ligar à mão? `npm start` e abra http://localhost:5173 no Chrome. O pas
 | "O que esse programa faz?" (com o caminho) | inspeciona o arquivo com o REA e explica |
 | "Abra a câmera e me diga o que você vê." | olha pela webcam e descreve |
 | "Abra o meu e-mail no Chrome." | usa o seu Chrome logado, pela extensão Claude |
+| "O que chegou em Downloads hoje?" | lista o que a guarda examinou, com os alertas na tela |
+| "Esse arquivo é seguro?" (com o caminho) | confere assinatura, origem e conteúdo, sem abrir |
 | "Deixe a tela vermelha." | ela muda a própria interface |
 
 Teclas: **Espaço** fala sem dizer o nome, **V** troca a voz, **G** liga o controle com as mãos pela câmera, **D** abre o diagnóstico, **Esc** põe em espera.
+
+<p align="center">
+  <img src="docs/aurora-guarda.jpg" alt="A guarda de downloads mostrando o exame de fatura.pdf.exe: alto risco, extensão dupla, sem assinatura, vindo de um site desconhecido. No topo, a linha CÉREBRO LOCAL indica que o modelo gratuito está respondendo." width="880">
+</p>
 
 ## Como funciona
 
@@ -76,14 +86,16 @@ Teclas: **Espaço** fala sem dizer o nome, **V** troca a voz, **G** liga o contr
                                                                   ├─ memória   (D:\ + espelho em E:\)
                                                                   ├─ REA       (engenharia reversa)
                                                                   ├─ Chrome    (o seu, pela extensão)
-                                                                  └─ os seus servidores MCP
+                                                                  ├─ guarda    (pasta Downloads)
+                                                                  ├─ os seus servidores MCP
+                                                                  └─ Ollama    (modelo gratuito, quando o limite acaba)
 ```
 
-A página desenha a interface, ouve e fala. A ponte roda o Claude Code como biblioteca, decide quais ferramentas podem ser usadas (tudo que escreve fica bloqueado até `--writes`) e manda de volta o texto, que a página fala frase por frase enquanto o resto ainda está chegando.
+A página desenha a interface, ouve e fala. A ponte roda o Claude Code como biblioteca, decide quais ferramentas podem ser usadas (tudo que escreve fica bloqueado até `--writes`) e manda de volta o texto, que a página fala frase por frase enquanto o resto ainda está chegando. Quando o Claude diz que o limite acabou, a ponte repassa a mesma pergunta para o Ollama, que fala o formato do Claude desde a versão 0.14, e a resposta chega à página como se nada tivesse mudado.
 
 ## Créditos
 
-A AURORA começou como um fork do [JARVIS do Aditya Dewaskar](https://github.com/adewaskar/jarvis), que fez a interface holográfica, a ponte com o Claude Code e o laço de voz. Esta versão acrescenta o português, o Windows, o início automático, a memória em disco, o REA e a nova identidade. Licença MIT, a mesma do original ([LICENSE](LICENSE)).
+A AURORA começou como um fork do [JARVIS do Aditya Dewaskar](https://github.com/adewaskar/jarvis), que fez a interface holográfica, a ponte com o Claude Code e o laço de voz. Esta versão acrescenta o português, o Windows, o início automático, a memória em disco, o REA, a reserva gratuita pelo Ollama, a guarda de downloads, o resumo ao ligar e a nova identidade. Licença MIT, a mesma do original ([LICENSE](LICENSE)).
 
 Música de Kevin MacLeod (incompetech.com), licença Creative Commons Attribution 4.0 ([créditos](public/audio/CREDITS.md)). Engenharia reversa pelo [REA](https://github.com/morluto/rea). Use a análise de programas só em software seu ou que você tenha autorização para analisar.
 
@@ -93,6 +105,6 @@ Música de Kevin MacLeod (incompetech.com), licença Creative Commons Attributio
 
 **AURORA** is a Portuguese-first voice assistant with a holographic interface, built on Claude Code. Say "Hey Aurora" and she answers out loud, searches, reads, shows what she found on screen, sees through the camera, drives your own signed-in Chrome, remembers across sessions and reverse engineers programs with [REA](https://github.com/morluto/rea).
 
-What sets her apart: she starts with Windows and switches herself on; her memory is plain text you can edit, mirrored to a second disk and repaired on start; she is read-only until you pass `--writes`; and she needs no API key, only your Claude Code login. Set `AURORA_LANG=en-GB` and `VITE_LANG=en-GB` in `.env.local` for British English with a British voice.
+What sets her apart: when the Claude plan's limit runs out she carries on, free, on a local model through Ollama, says so once and switches back when the limit resets (`npm run ollama` sets it up); she examines every program, installer, script or APK that lands in Downloads, read-only, and tells you who signed it, where it came from and whether it is disguised; she opens each day with a three-sentence briefing; she starts with Windows and switches herself on; her memory is plain text you can edit, mirrored to a second disk and repaired on start; she is read-only until you pass `--writes`; and she needs no API key, only your Claude Code login. Set `AURORA_LANG=en-GB` and `VITE_LANG=en-GB` in `.env.local` for British English with a British voice.
 
 Quick start on Windows: install Node.js 22, Chrome and Claude Code (log in once), then `git clone https://github.com/cedu360/Aurora`, `npm install`, `npm run inicio-automatico`, and double-click the **Aurora** shortcut. Forked from [adewaskar/jarvis](https://github.com/adewaskar/jarvis), MIT licence.
